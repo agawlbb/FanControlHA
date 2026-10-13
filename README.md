@@ -66,3 +66,7 @@ Install `cryptography aiohttp probatio voluptuous pytest pytest-asyncio` in an i
 The second CI job loads the integration into an isolated real Home Assistant 2026.10.1 instance under Python 3.14 and checks its actual options flow, selector, actions, and unload. It uses synthetic devices and never connects to your home.
 
 Live verification on Home Assistant 2026.10.1 also confirmed integration loading, native pairing approval, encrypted local/remote configuration delivery, encrypted device-state reads, the per-watch select entity, the active-device action, and rejection after revocation. Physical watch discovery and tile lifecycle behavior still require a hardware check.
+
+## Removing watch devices
+
+Open a Fan Control watch device in **Settings → Devices & services → Devices**, then choose **Delete** from its menu. HA removes its registry device and associated entities; the integration first revokes its watch credential and pending pairing handoff. This also works for previously revoked, unavailable watch devices. Removing the active watch requires pairing it again before use.

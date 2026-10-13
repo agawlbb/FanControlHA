@@ -99,3 +99,29 @@ async def test_selector_changes_configuration_without_device_service():
     with pytest.raises(HomeAssistantError): await selection.async_select_option("fan.other")
     del manager.watches[watch_id]
     assert not selection.available and selection.options == [] and selection.current_option is None
+
+
+@pytest.mark.asyncio
+async def test_native_device_removal_revokes_only_selected_watch():
+    from custom_components.fan_control import async_remove_config_entry_device
+    hass, manager, watch_id, created = runtime()
+    entry = SimpleNamespace(entry_id="example-entry")
+    hass.data["fan_control"]["entry"] = entry
+    other = "cd" * 16; manager.watches[other] = dict(manager.watches[watch_id])
+    manager.nonces[watch_id + ":nonce"] = 1; manager.nonces[other + ":nonce"] = 1
+    device = SimpleNamespace(identifiers={("fan_control", watch_id)})
+    assert await async_remove_config_entry_device(hass, entry, device)
+    assert watch_id not in manager.watches and other in manager.watches
+    assert watch_id + ":nonce" not in manager.nonces and other + ":nonce" in manager.nonces
+    assert not any(value.get("watch_id") == watch_id for value in manager.sessions.values())
+    assert await async_remove_config_entry_device(hass, entry, device)  # Already-revoked stale devices also removable.
+
+@pytest.mark.asyncio
+async def test_device_removal_rejects_unrelated_device_and_keeps_access_on_save_failure():
+    from custom_components.fan_control import async_remove_config_entry_device
+    hass, manager, watch_id, _ = runtime(); entry = SimpleNamespace(entry_id="example-entry")
+    hass.data["fan_control"]["entry"] = entry
+    assert not await async_remove_config_entry_device(hass, entry, SimpleNamespace(identifiers={("other", watch_id)}))
+    hass.data["fan_control"]["store"].async_save.side_effect = OSError("Synthetic save failure")
+    with pytest.raises(OSError): await async_remove_config_entry_device(hass, entry, SimpleNamespace(identifiers={("fan_control", watch_id)}))
+    assert watch_id in manager.watches

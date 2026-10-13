@@ -85,6 +85,25 @@ async def async_remove_entry(hass, entry):
     await Store(hass, 1, DOMAIN).async_remove()
 
 
+async def async_remove_config_entry_device(hass, entry, device_entry):
+    """Let HA remove a watch device after atomically revoking its credential."""
+    runtime = hass.data.get(DOMAIN)
+    identities = [value for domain, value in device_entry.identifiers if domain == DOMAIN]
+    if runtime is None or runtime["entry"].entry_id != entry.entry_id or len(identities) != 1:
+        return False
+    watch_id = identities[0]
+    async with runtime["lock"]:
+        manager = runtime["manager"]
+        watches = {key: value for key, value in manager.watches.items() if key != watch_id}
+        nonces = {key: value for key, value in manager.nonces.items() if not key.startswith(watch_id + ":")}
+        # Persist first: if saving fails, HA keeps the device and its current authorization.
+        await runtime["store"].async_save({"watches": watches, "nonces": nonces})
+        manager.watches, manager.nonces = watches, nonces
+        manager.sessions = {key: value for key, value in manager.sessions.items() if value.get("watch_id") != watch_id}
+        async_dispatcher_send(hass, f"{DOMAIN}_updated")
+    return True
+
+
 def response(value, status=200):
     return web.json_response(value, status=status, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
