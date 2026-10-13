@@ -53,3 +53,5 @@ The repositories contain no installed addresses, device IDs, access tokens, pair
 Install `cryptography aiohttp probatio voluptuous pytest pytest-asyncio` in an isolated environment and run `python -m pytest tests -q`. Tests exercise pairing encryption/expiry, request integrity/replay/revocation, device/command restrictions, original speed mappings, chunked-body limits, rate limiting, and native options-flow behavior using HA API doubles. These tests do not substitute for installation and a real-watch network/discovery check.
 
 The second CI job loads the integration into an isolated real Home Assistant 2026.10.1 instance under Python 3.14 and checks its actual options flow, selector, actions, and unload. It uses synthetic devices and never connects to your home.
+
+Live verification on Home Assistant 2026.10.1 also confirmed integration loading, native pairing approval, encrypted local/remote configuration delivery, encrypted device-state reads, the per-watch select entity, the active-device action, and rejection after revocation. Physical watch discovery and tile lifecycle behavior still require a hardware check.
