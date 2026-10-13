@@ -93,7 +93,8 @@
         "title": "Select active tile panel",
         "data": {
           "panel_id": "Panel"
-        }
+        },
+        "description": "Choose a panel and press Submit to save. The selected option reflects the current saved panel. The watch changes when its tile is visible."
       },
       "panel": {
         "title": "Work Morning panel",

@@ -146,7 +146,8 @@ class FanControlOptions(config_entries.OptionsFlow):
         watch = self.hass.data[DOMAIN]["manager"].watches[self.watch_id]
         options = [{"value": item["id"], "label": item["name"]} for item in watch.get("panels", [])]
         if include_devices:
-            options.insert(0, {"value": "devices", "label": "Device controls (fan, lights, etc.)"})
+            active = next((item for item in watch["devices"] if item["entity"] == watch["entity"]), watch["devices"][0])
+            options.insert(0, {"value": "devices", "label": active["title"]})
         return selector.SelectSelector(selector.SelectSelectorConfig(options=options))
 
     async def async_step_edit_panel(self, user_input=None):
@@ -223,4 +224,5 @@ class FanControlOptions(config_entries.OptionsFlow):
                 watch["revision"] += 1
                 await save(runtime); async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
             return self.async_create_entry(title="", data={})
-        return self.async_show_form(step_id="activate_panel", data_schema=vol.Schema({vol.Required("panel_id"): self.panel_selector(True)}))
+        watch = runtime["manager"].watches[self.watch_id]
+        return self.async_show_form(step_id="activate_panel", data_schema=vol.Schema({vol.Required("panel_id", default=watch.get("active_panel") or "devices"): self.panel_selector(True)}))

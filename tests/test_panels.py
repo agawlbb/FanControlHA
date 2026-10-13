@@ -75,3 +75,18 @@ async def test_panel_flow_and_selector_do_not_control_physical_devices():
     await flow.async_step_activate_panel({"panel_id": "work_morning"})
     await flow.async_step_remove_panel({"panel_id": "work_morning"})
     assert selection.options == ["devices"] and selection.current_option == "devices"
+
+
+@pytest.mark.asyncio
+async def test_active_panel_form_defaults_to_saved_selection():
+    hass, manager, watch_id, _ = with_panel()
+    flow = FanControlOptions(); flow.hass = hass; flow.watch_id = watch_id
+    manager.watches[watch_id]["active_panel"] = "work_morning"
+    result = await flow.async_step_activate_panel()
+    key = next(key for key in result["data_schema"].schema if str(key) == "panel_id")
+    assert key.default() == "work_morning"
+    await flow.async_step_activate_panel({"panel_id": "devices"})
+    assert configuration(manager.watches[watch_id])["entity"] == "fan.example"
+    result = await flow.async_step_activate_panel()
+    key = next(key for key in result["data_schema"].schema if str(key) == "panel_id")
+    assert key.default() == "devices"
