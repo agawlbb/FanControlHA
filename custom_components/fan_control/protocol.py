@@ -50,6 +50,8 @@ def address(value, external=False):
     uri = urlsplit(value)
     if uri.scheme not in (("https",) if external else ("http", "https")) or not uri.hostname or uri.username or uri.password or uri.query or uri.fragment:
         raise ValueError("Invalid address")
+    if uri.port is not None and not 1 <= uri.port <= 65535:
+        raise ValueError("Invalid port")
     if uri.scheme == "http":
         import ipaddress
         host = uri.hostname

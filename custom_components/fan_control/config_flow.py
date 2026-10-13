@@ -83,7 +83,7 @@ class FanControlOptions(config_entries.OptionsFlow):
                     raise ValueError("Invalid selection")
                 local = address(user_input["local_url"])
                 remote = address(user_input.get("remote_url", ""), external=True) if user_input.get("remote_url", "").strip() else ""
-                config = {"name": user_input["name"].strip()[:80] or "Watch", "url": local, "remote_url": remote, "entity": user_input["active_entity"], "devices": [{"entity": entity, "title": str(self.hass.states.get(entity).attributes.get("friendly_name", entity))[:80]} for entity in selected], "owner_id": user_input["owner_id"]}
+                config = {"name": user_input["name"].strip()[:80] or "Watch", "url": local, "remote_url": remote, "entity": user_input["active_entity"], "devices": [{"entity": entity, "title": (str(self.hass.states.get(entity).attributes.get("friendly_name", entity)).strip() or entity)[:80]} for entity in selected], "owner_id": user_input["owner_id"]}
                 async with runtime["lock"]:
                     if self.watch_id is None:
                         self.watch_id = runtime["manager"].approve(self.code, config)
