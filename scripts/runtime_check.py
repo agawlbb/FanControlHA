@@ -7,7 +7,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from homeassistant.core import HomeAssistant
-from homeassistant.setup import async_setup_component
+from homeassistant.bootstrap import async_setup_hass
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.auth.const import GROUP_ID_ADMIN
 
@@ -18,8 +18,9 @@ async def main():
         shutil.copytree(source, Path(directory) / "custom_components", ignore=shutil.ignore_patterns("__pycache__"))
         hass = HomeAssistant(directory)
         try:
-            assert await async_setup_component(hass, "http", {"http": {"server_host": "127.0.0.1", "server_port": 0}})
-            assert await async_setup_component(hass, "fan_control", {})
+            # Bootstrap initializes auth, loaders, and the config-entry manager as on HA startup.
+            await async_setup_hass(hass, {"http": {"server_host": "127.0.0.1", "server_port": 0}, "fan_control": {}})
+            assert "fan_control" in hass.config.components
             result = await hass.config_entries.flow.async_init("fan_control", context={"source": "user"}, data={})
             assert result["type"] == "create_entry", result
             entry = result["result"]

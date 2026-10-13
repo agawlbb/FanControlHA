@@ -6,6 +6,7 @@ import pytest
 from custom_components.fan_control import PairView, WatchView, async_setup_entry, command, read_body
 from custom_components.fan_control.manager import Manager
 from custom_components.fan_control.config_flow import FanControlOptions
+from custom_components.fan_control.select import WatchSelection
 from .test_protocol import CONFIG, packet, session
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -83,3 +84,18 @@ async def test_native_pairing_flow_and_revoke():
     assert manager.watches[flow.watch_id]["entity"] == "light.example"
     assert (await flow.async_step_revoke({"watch_id": flow.watch_id}))["type"] == "create_entry"
     assert flow.watch_id not in manager.watches
+
+@pytest.mark.asyncio
+async def test_selector_changes_configuration_without_device_service():
+    hass, manager, watch_id, _ = runtime()
+    manager.watches[watch_id]["devices"].append({"entity": "light.example", "title": "Light"})
+    selection = WatchSelection(hass, watch_id)
+    assert selection.available and selection.current_option == "fan.example"
+    await selection.async_select_option("light.example")
+    assert selection.current_option == "light.example"
+    assert manager.watches[watch_id]["revision"] == 2
+    hass.services.async_call.assert_not_awaited()
+    from homeassistant.exceptions import HomeAssistantError
+    with pytest.raises(HomeAssistantError): await selection.async_select_option("fan.other")
+    del manager.watches[watch_id]
+    assert not selection.available and selection.options == [] and selection.current_option is None

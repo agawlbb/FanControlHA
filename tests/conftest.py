@@ -4,7 +4,7 @@ import sys
 import types
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-for name in ("homeassistant", "homeassistant.components", "homeassistant.components.http", "homeassistant.core", "homeassistant.exceptions", "homeassistant.helpers", "homeassistant.helpers.storage", "homeassistant.helpers.dispatcher", "homeassistant.config_entries", "homeassistant.helpers.selector", "homeassistant.helpers.network"):
+for name in ("homeassistant", "homeassistant.components", "homeassistant.components.http", "homeassistant.components.select", "homeassistant.core", "homeassistant.exceptions", "homeassistant.helpers", "homeassistant.helpers.entity", "homeassistant.helpers.storage", "homeassistant.helpers.dispatcher", "homeassistant.config_entries", "homeassistant.helpers.selector", "homeassistant.helpers.network"):
     sys.modules[name] = types.ModuleType(name)
 sys.modules["homeassistant.components.http"].HomeAssistantView = type("HomeAssistantView", (), {})
 sys.modules["homeassistant.core"].Context = lambda **kwargs: kwargs
@@ -12,6 +12,9 @@ sys.modules["homeassistant.core"].callback = lambda function: function
 sys.modules["homeassistant.exceptions"].HomeAssistantError = type("HomeAssistantError", (Exception,), {})
 sys.modules["homeassistant.helpers.storage"].Store = lambda *args: None
 sys.modules["homeassistant.helpers.dispatcher"].async_dispatcher_send = lambda *args: None
+sys.modules["homeassistant.helpers.dispatcher"].async_dispatcher_connect = lambda *args: lambda: None
+sys.modules["homeassistant.components.select"].SelectEntity = type("SelectEntity", (), {"hass": None, "entity_id": None})
+sys.modules["homeassistant.helpers.entity"].DeviceInfo = dict
 
 class Flow:
     def __init_subclass__(cls, **kwargs):
