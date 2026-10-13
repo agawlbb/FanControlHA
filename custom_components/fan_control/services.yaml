@@ -1,0 +1,22 @@
+set_active_device:
+  name: Set active watch device
+  description: Changes the tile device on the watch's next visible refresh. The device must already be approved for that watch.
+  fields:
+    watch_id:
+      name: Watch ID
+      description: Full watch ID shown in the watch app's connection status.
+      required: true
+      selector:
+        text:
+    entity_id:
+      name: Device
+      required: true
+      selector:
+        entity:
+          domain:
+            - fan
+            - light
+            - switch
+            - input_boolean
+            - script
+            - scene

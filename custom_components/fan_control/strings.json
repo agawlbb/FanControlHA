@@ -1,0 +1,73 @@
+{
+  "title": "Fan Control",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Fan Control",
+        "description": "Enable local watch pairing. After adding the integration, choose Configure to approve your watch and select its devices."
+      }
+    },
+    "abort": {
+      "already_configured": "Fan Control is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Manage watches",
+        "menu_options": {
+          "pair": "Pair a watch",
+          "configure": "Configure watch devices and addresses",
+          "revoke": "Revoke a watch"
+        }
+      },
+      "pair": {
+        "title": "Enter watch code",
+        "description": "On the watch, choose Find Home Assistant and keep the pairing screen open. Enter its eight-digit code here.",
+        "data": {
+          "code": "Pairing code"
+        }
+      },
+      "confirm": {
+        "title": "Verify watch fingerprint",
+        "description": "Compare this fingerprint with the watch: **{fingerprint}**. Approve only if all characters match.",
+        "data": {
+          "matches": "The fingerprint matches my watch"
+        }
+      },
+      "configure": {
+        "title": "Choose watch",
+        "data": {
+          "watch_id": "Watch"
+        }
+      },
+      "devices": {
+        "title": "Choose watch controls",
+        "description": "Choose up to 16 devices in the desired swipe order and an active tile device from that list. Remote access requires a working HTTPS address. Local HTTP uses encrypted application messages. Changes appear when the watch next opens its controls or refreshes the tile.",
+        "data": {
+          "name": "Watch name",
+          "entities": "Approved devices",
+          "active_entity": "Active tile device",
+          "local_url": "Local Home Assistant address",
+          "remote_url": "Remote HTTPS address (optional)",
+          "owner_id": "Access-owning administrator"
+        }
+      },
+      "revoke": {
+        "title": "Revoke watch access",
+        "description": "The selected watch will stop connecting. Pair it again to restore access.",
+        "data": {
+          "watch_id": "Watch"
+        }
+      }
+    },
+    "error": {
+      "invalid_pairing": "Pairing expired or was already approved. Start pairing again on the watch.",
+      "invalid_configuration": "Check the addresses and device selection. The active device must be in your approved list. Pairing codes expire after 10 minutes."
+    },
+    "abort": {
+      "admin_required": "A Home Assistant administrator must manage watch access.",
+      "no_watches": "No watches are paired yet."
+    }
+  }
+}
