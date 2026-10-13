@@ -15,6 +15,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import DOMAIN
+from .panels import configuration, find_panel, panel_state, panel_command
 from .manager import Manager
 from .protocol import devices, seal_response
 
@@ -41,11 +42,28 @@ async def async_setup_entry(hass, entry):
             if not watch or call.data["entity_id"] not in [item["entity"] for item in watch["devices"]]:
                 raise HomeAssistantError("Select a device already approved for this watch")
             watch["entity"] = call.data["entity_id"]
+            watch["active_panel"] = ""
             watch["revision"] += 1
             await save(runtime)
             async_dispatcher_send(hass, f"{DOMAIN}_updated")
 
     hass.services.async_register(DOMAIN, "set_active_device", set_active, schema=vol.Schema({vol.Required("watch_id"): str, vol.Required("entity_id"): str}))
+    async def set_panel(call):
+        async with runtime["lock"]:
+            watch = manager.watches.get(call.data["watch_id"])
+            if watch is None:
+                raise HomeAssistantError("Watch not paired")
+            panel_id = call.data["panel_id"]
+            if panel_id != "devices":
+                try:
+                    find_panel(watch, panel_id)
+                except ValueError as error:
+                    raise HomeAssistantError("Select a configured panel") from error
+            watch["active_panel"] = "" if panel_id == "devices" else panel_id
+            watch["revision"] += 1
+            await save(runtime)
+            async_dispatcher_send(hass, f"{DOMAIN}_updated")
+    hass.services.async_register(DOMAIN, "set_active_panel", set_panel, schema=vol.Schema({vol.Required("watch_id"): str, vol.Required("panel_id"): str}))
     await hass.config_entries.async_forward_entry_setups(entry, ["select"])
     return True
 
@@ -54,6 +72,7 @@ async def async_unload_entry(hass, entry):
     if not await hass.config_entries.async_unload_platforms(entry, ["select"]):
         return False
     hass.services.async_remove(DOMAIN, "set_active_device")
+    hass.services.async_remove(DOMAIN, "set_active_panel")
     hass.data.pop(DOMAIN, None)
     return True
 
@@ -158,7 +177,13 @@ class WatchView(HomeAssistantView):
                     raise ValueError("Pairing owner unavailable")
                 action = body.get("action")
                 if action == "config":
-                    result = {key: watch[key] for key in ("url", "remote_url", "entity", "devices", "revision")}
+                    result = configuration(watch)
+                elif action in ("panel_state", "panel_command"):
+                    panel = find_panel(watch, body.get("panel_id"))
+                    if action == "panel_command":
+                        domain, service, data = panel_command(self.hass, panel, body.get("command"))
+                        await self.hass.services.async_call(domain, service, data, blocking=True, context=Context(user_id=owner.id))
+                    result = panel_state(self.hass, panel)
                 elif action in ("state", "command"):
                     entity = body.get("entity")
                     if entity not in devices([item["entity"] for item in watch["devices"]]):

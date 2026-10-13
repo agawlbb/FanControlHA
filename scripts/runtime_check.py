@@ -46,13 +46,31 @@ async def main():
             assert flow["type"] == "create_entry", flow
             await hass.async_block_till_done()
             watch_id = next(iter(manager.watches))
-            selects = hass.states.async_all("select")
-            assert len(selects) == 1 and selects[0].state == "fan.example", selects
+            selects = [state for state in hass.states.async_all("select") if state.state == "fan.example"]
+            assert len(selects) == 1, selects
             await hass.services.async_call("fan_control", "set_active_device", {"watch_id": watch_id, "entity_id": "light.example"}, blocking=True)
             await hass.async_block_till_done()
             assert hass.states.get(selects[0].entity_id).state == "light.example"
             await hass.services.async_call("select", "select_option", {"entity_id": selects[0].entity_id, "option": "fan.example"}, blocking=True)
             assert manager.watches[watch_id]["entity"] == "fan.example"
+            hass.states.async_set("sensor.example_battery", "82", {"unit_of_measurement": "%"})
+            hass.states.async_set("climate.example_car", "off", {"supported_features": 384})
+            hass.states.async_set("script.example_leave", "off", {})
+            flow = await hass.config_entries.options.async_init(entry.entry_id)
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "panels"})
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"watch_id": watch_id})
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_panel"})
+            assert flow["step_id"] == "panel", flow
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {
+                "id": "work_morning", "name": "Work Morning", "battery_entity": "sensor.example_battery",
+                "climate_entity": "climate.example_car", "script_entity": "script.example_leave",
+                "climate_label": "Climate", "script_label": "Leave for work"})
+            assert flow["type"] == "create_entry", flow
+            await hass.services.async_call("fan_control", "set_active_panel", {"watch_id": watch_id, "panel_id": "work_morning"}, blocking=True)
+            from custom_components.fan_control.panels import configuration
+            assert configuration(manager.watches[watch_id])["entity"] == "panel.work_morning"
+            await hass.services.async_call("fan_control", "set_active_panel", {"watch_id": watch_id, "panel_id": "devices"}, blocking=True)
+            assert configuration(manager.watches[watch_id])["entity"] == "fan.example"
             assert await hass.config_entries.async_unload(entry.entry_id)
             print("Real Home Assistant load, pairing/options flow, selector, actions, and unload passed.")
         finally:

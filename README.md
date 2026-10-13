@@ -4,6 +4,17 @@ Pair and configure a standalone Wear OS watch entirely inside Home Assistant. Th
 
 Requires Home Assistant 2026.10 or newer and the integration-enabled Fan Control watch app. This is an initial custom integration, not an official Home Assistant component.
 
+## Configurable watch panels
+
+In **Settings → Devices & services → Fan Control → Configure → Manage watch panels**, choose a watch and **Add Work Morning panel**. Select a battery percentage sensor, a climate power entity (or switch/input boolean), and a script using HA entity pickers. Panel names and button labels are editable; no personal entity IDs are compiled into the watch. Battery sensors must use `%`; climate entities must support HA power on/off. Missing sensor values show `?%`, unavailable climate controls are disabled, and running scripts cannot be started again from the panel.
+
+The Work Morning layout places large battery percentage and climate toggle in its top half and a large script button below. A script response confirms dispatch, not that the entire script completed. Existing fan controls and their speed mapping remain unchanged. Configured panels also appear in the app's vertical swipe pages.
+
+Choose **Select active panel** in the panel manager, or use the watch's new **Tile panel** select entity in an automation with `select.select_option`. Its options are `devices` and your stable panel IDs (default `work_morning`). Alternatively call **Fan Control: Set active watch panel** (`fan_control.set_active_panel`) with the Watch ID and Panel ID. `devices` restores the active device controls. The existing **Tile device** selector and `fan_control.set_active_device` also restore device controls when selecting a device.
+
+Panels are stored per watch. Up to eight panels and sixteen total device/panel pages are supported. Their configured roles authorize only percentage reads, climate power, and their selected script; the watch cannot substitute another entity or an arbitrary service. Panel ID stays fixed when editing so automations do not break. Changing panel entities invalidates existing tile buttons until refresh. Removing the active panel falls back to device controls. Changes arrive on the next visible refresh; no background watch connections or Wi-Fi holds are added.
+
+
 ## Install
 
 Copy `custom_components/fan_control` into the same directory under your Home Assistant configuration directory. Restart Home Assistant, then choose **Settings → Devices & services → Add integration → Fan Control**. No changes to `configuration.yaml` are needed.

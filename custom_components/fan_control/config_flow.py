@@ -9,6 +9,7 @@ from homeassistant.helpers.network import get_url, NoURLAvailableError
 
 from .const import DOMAIN, SUPPORTED_DOMAINS
 from .protocol import address, devices
+from .panels import validate_panel
 from . import save
 from homeassistant.core import callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -34,7 +35,7 @@ class FanControlOptions(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         # HA protects native options endpoints with require_admin. Options context
         # does not carry the browser's user ID, so select an active admin owner explicitly.
-        return self.async_show_menu(step_id="init", menu_options=["pair", "configure", "revoke"])
+        return self.async_show_menu(step_id="init", menu_options=["pair", "configure", "panels", "revoke"])
 
     async def async_step_pair(self, user_input=None):
         errors = {}
@@ -77,6 +78,8 @@ class FanControlOptions(config_entries.OptionsFlow):
         if user_input is not None:
             try:
                 selected = devices(user_input["entities"])
+                if len(selected) + len(existing.get("panels", [])) > 16:
+                    raise ValueError("Too many watch pages")
                 if user_input["owner_id"] not in [user.id for user in admins]:
                     raise ValueError("Invalid owner")
                 if user_input["active_entity"] not in selected or any(self.hass.states.get(entity) is None for entity in selected):
@@ -122,3 +125,102 @@ class FanControlOptions(config_entries.OptionsFlow):
                 async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
             return self.async_create_entry(title="", data={})
         return self.async_show_form(step_id="revoke", data_schema=vol.Schema({vol.Required("watch_id"): self.watch_selector()}))
+
+
+    async def async_step_panels(self, user_input=None):
+        if not self.hass.data[DOMAIN]["manager"].watches:
+            return self.async_abort(reason="no_watches")
+        if user_input is not None:
+            self.watch_id = user_input["watch_id"]
+            return await self.async_step_panel_menu()
+        return self.async_show_form(step_id="panels", data_schema=vol.Schema({vol.Required("watch_id"): self.watch_selector()}))
+
+    async def async_step_panel_menu(self, user_input=None):
+        return self.async_show_menu(step_id="panel_menu", menu_options=["add_panel", "edit_panel", "remove_panel", "activate_panel"])
+
+    async def async_step_add_panel(self, user_input=None):
+        self.editing_panel = None
+        return await self.async_step_panel()
+
+    def panel_selector(self, include_devices=False):
+        watch = self.hass.data[DOMAIN]["manager"].watches[self.watch_id]
+        options = [{"value": item["id"], "label": item["name"]} for item in watch.get("panels", [])]
+        if include_devices:
+            options.insert(0, {"value": "devices", "label": "Device controls (fan, lights, etc.)"})
+        return selector.SelectSelector(selector.SelectSelectorConfig(options=options))
+
+    async def async_step_edit_panel(self, user_input=None):
+        watch = self.hass.data[DOMAIN]["manager"].watches[self.watch_id]
+        if not watch.get("panels"):
+            return self.async_abort(reason="no_panels")
+        if user_input is not None:
+            self.editing_panel = user_input["panel_id"]
+            return await self.async_step_panel()
+        return self.async_show_form(step_id="edit_panel", data_schema=vol.Schema({vol.Required("panel_id"): self.panel_selector()}))
+
+    async def async_step_panel(self, user_input=None):
+        runtime = self.hass.data[DOMAIN]
+        watch = runtime["manager"].watches[self.watch_id]
+        existing = next((item for item in watch.get("panels", []) if item["id"] == self.editing_panel), {})
+        errors = {}
+        if user_input is not None:
+            try:
+                panel = validate_panel(user_input)
+                if self.editing_panel and panel["id"] != self.editing_panel:
+                    raise ValueError("Panel ID cannot change while editing")
+                if any(self.hass.states.get(panel[role]) is None for role in ("battery_entity", "climate_entity", "script_entity")):
+                    raise ValueError("Entity not found")
+                battery = self.hass.states.get(panel["battery_entity"])
+                if battery.attributes.get("unit_of_measurement") != "%":
+                    raise ValueError("Select a percentage sensor")
+                async with runtime["lock"]:
+                    current = runtime["manager"].watches[self.watch_id]
+                    panels = list(current.get("panels", []))
+                    if not self.editing_panel and any(item["id"] == panel["id"] for item in panels):
+                        raise ValueError("Duplicate panel ID")
+                    panels = [item for item in panels if item["id"] != self.editing_panel]
+                    panels.append(panel)
+                    if len(panels) > 8 or len(panels) + len(current["devices"]) > 16:
+                        raise ValueError("Too many watch pages")
+                    current["panels"] = panels; current["revision"] += 1
+                    await save(runtime); async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
+                return self.async_create_entry(title="", data={})
+            except (ValueError, KeyError):
+                errors["base"] = "invalid_panel"
+        return self.async_show_form(step_id="panel", errors=errors, data_schema=vol.Schema({
+            vol.Required("id", default=existing.get("id", "work_morning")): str,
+            vol.Required("name", default=existing.get("name", "Work Morning")): str,
+            vol.Required("battery_entity", **({"default": existing["battery_entity"]} if existing else {})): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Required("climate_entity", **({"default": existing["climate_entity"]} if existing else {})): selector.EntitySelector(selector.EntitySelectorConfig(domain=["climate", "switch", "input_boolean"])),
+            vol.Required("script_entity", **({"default": existing["script_entity"]} if existing else {})): selector.EntitySelector(selector.EntitySelectorConfig(domain="script")),
+            vol.Required("climate_label", default=existing.get("climate_label", "Climate")): str,
+            vol.Required("script_label", default=existing.get("script_label", "Leave for work")): str,
+        }))
+
+    async def async_step_remove_panel(self, user_input=None):
+        runtime = self.hass.data[DOMAIN]
+        if not runtime["manager"].watches[self.watch_id].get("panels"):
+            return self.async_abort(reason="no_panels")
+        if user_input is not None:
+            async with runtime["lock"]:
+                watch = runtime["manager"].watches[self.watch_id]
+                watch["panels"] = [item for item in watch.get("panels", []) if item["id"] != user_input["panel_id"]]
+                if watch.get("active_panel") == user_input["panel_id"]:
+                    watch["active_panel"] = ""
+                watch["revision"] += 1
+                await save(runtime); async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
+            return self.async_create_entry(title="", data={})
+        return self.async_show_form(step_id="remove_panel", data_schema=vol.Schema({vol.Required("panel_id"): self.panel_selector()}))
+
+    async def async_step_activate_panel(self, user_input=None):
+        runtime = self.hass.data[DOMAIN]
+        if user_input is not None:
+            async with runtime["lock"]:
+                watch = runtime["manager"].watches[self.watch_id]
+                if user_input["panel_id"] not in ["devices"] + [item["id"] for item in watch.get("panels", [])]:
+                    return self.async_abort(reason="no_panels")
+                watch["active_panel"] = "" if user_input["panel_id"] == "devices" else user_input["panel_id"]
+                watch["revision"] += 1
+                await save(runtime); async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
+            return self.async_create_entry(title="", data={})
+        return self.async_show_form(step_id="activate_panel", data_schema=vol.Schema({vol.Required("panel_id"): self.panel_selector(True)}))

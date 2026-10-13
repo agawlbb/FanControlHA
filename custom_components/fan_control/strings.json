@@ -18,7 +18,8 @@
         "menu_options": {
           "pair": "Pair a watch",
           "configure": "Configure watch devices and addresses",
-          "revoke": "Revoke a watch"
+          "revoke": "Revoke a watch",
+          "panels": "Manage watch panels"
         }
       },
       "pair": {
@@ -59,15 +60,64 @@
         "data": {
           "watch_id": "Watch"
         }
+      },
+      "panels": {
+        "title": "Choose watch for panels",
+        "data": {
+          "watch_id": "Watch"
+        }
+      },
+      "panel_menu": {
+        "title": "Manage panels",
+        "menu_options": {
+          "add_panel": "Add Work Morning panel",
+          "edit_panel": "Edit a panel",
+          "remove_panel": "Remove a panel",
+          "activate_panel": "Select active panel"
+        }
+      },
+      "edit_panel": {
+        "title": "Edit panel",
+        "data": {
+          "panel_id": "Panel"
+        }
+      },
+      "remove_panel": {
+        "title": "Remove panel",
+        "description": "Removes this panel and its access to the selected entities. If active, device controls will be restored.",
+        "data": {
+          "panel_id": "Panel"
+        }
+      },
+      "activate_panel": {
+        "title": "Select active tile panel",
+        "data": {
+          "panel_id": "Panel"
+        }
+      },
+      "panel": {
+        "title": "Work Morning panel",
+        "description": "Choose a percentage sensor, a climate entity supporting power or a switch, and a script. Panel ID is used by automations and stays fixed after creation. Up to eight panels and sixteen total pages per watch. Climate labels: up to 12 characters; script labels: up to 18.",
+        "data": {
+          "id": "Panel ID (letters, digits, underscores)",
+          "name": "Panel name",
+          "battery_entity": "Battery percentage sensor",
+          "climate_entity": "Climate power control",
+          "script_entity": "Leave for Work script",
+          "climate_label": "Climate button label",
+          "script_label": "Script button label"
+        }
       }
     },
     "error": {
       "invalid_pairing": "Pairing expired or was already approved. Start pairing again on the watch.",
-      "invalid_configuration": "Check the addresses and device selection. The active device must be in your approved list. Pairing codes expire after 10 minutes."
+      "invalid_configuration": "Check the addresses and device selection. The active device must be in your approved list. Pairing codes expire after 10 minutes.",
+      "invalid_panel": "Check entity types, percentage units, label lengths and unique panel ID. Keep an edited panel ID unchanged."
     },
     "abort": {
       "admin_required": "A Home Assistant administrator must manage watch access.",
-      "no_watches": "No watches are paired yet."
+      "no_watches": "No watches are paired yet.",
+      "no_panels": "No panels are configured for this watch."
     }
   }
 }

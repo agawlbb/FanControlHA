@@ -19,6 +19,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
             if watch_id not in known:
                 known[watch_id] = WatchSelection(hass, watch_id)
                 added.append(known[watch_id])
+                known[watch_id + "_panel"] = PanelSelection(hass, watch_id)
+                added.append(known[watch_id + "_panel"])
         if added:
             async_add_entities(added)
         for watch_id, entity in known.items():
@@ -64,6 +66,32 @@ class WatchSelection(SelectEntity):
             if option not in self.options:
                 raise HomeAssistantError("Device not approved for this watch")
             self.watch["entity"] = option
+            self.watch["active_panel"] = ""
+            self.watch["revision"] += 1
+            await save(runtime)
+            async_dispatcher_send(self._runtime_hass, f"{DOMAIN}_updated")
+
+
+class PanelSelection(WatchSelection):
+    _attr_name = "Tile panel"
+    def __init__(self, hass, watch_id):
+        super().__init__(hass, watch_id)
+        self._attr_unique_id = watch_id + "_panel"
+
+    @property
+    def options(self):
+        return ["devices"] + [panel["id"] for panel in self.watch.get("panels", [])] if self.watch else []
+
+    @property
+    def current_option(self):
+        return (self.watch.get("active_panel") or "devices") if self.watch else None
+
+    async def async_select_option(self, option):
+        runtime = self._runtime_hass.data[DOMAIN]
+        async with runtime["lock"]:
+            if option not in self.options:
+                raise HomeAssistantError("Panel not configured for this watch")
+            self.watch["active_panel"] = "" if option == "devices" else option
             self.watch["revision"] += 1
             await save(runtime)
             async_dispatcher_send(self._runtime_hass, f"{DOMAIN}_updated")
