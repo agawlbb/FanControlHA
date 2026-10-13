@@ -46,7 +46,7 @@ Paired watch traffic uses AES-256-GCM request and response envelopes, a per-watc
 
 The watch credential is **not** an HA bearer token. It authorizes only this integration's approved devices and fixed command allowlist, not arbitrary HA APIs/services. Scripts and scenes can themselves perform broader actions, so approve only the ones you intend the watch to run. Requests execute with the configured administrator's context. HA administrators can configure and revoke watches. Watch secrets are stored through HA's supported Store API under `.storage/fan_control` and must be protected with your HA configuration and backups; the integration never logs them.
 
-The repositories contain no installed addresses, device IDs, access tokens, pairing keys, or personal watch configuration. Example addresses and credentials in tests are synthetic. Watch settings are encrypted using Android Keystore and excluded from backups. The existing manual HTTPS and website pairing modes remain available in the app but are not needed for this integration.
+The repositories contain no installed addresses, device IDs, access tokens, pairing keys, or personal watch configuration. Example addresses and credentials in tests are synthetic. Watch settings are encrypted using Android Keystore and excluded from backups. New watch setup uses local Home Assistant discovery and integration approval only. The retired hosted website and manual token-entry setup are no longer offered.
 
 ## Development
 
