@@ -98,7 +98,7 @@
       },
       "panel": {
         "title": "Work Morning panel",
-        "description": "Choose a percentage sensor, a climate entity supporting power or a switch, and a script. Panel ID is used by automations and stays fixed after creation. Up to eight panels and sixteen total pages per watch. Climate labels: up to 12 characters; script labels: up to 18.",
+        "description": "Choose a percentage sensor, a climate entity supporting power or a switch, and a script. Panel ID is used by automations and stays fixed after creation. Up to eight panels and sixteen total pages per watch. Climate labels: up to 12 characters; script labels: up to 18. For a vehicle, select both wake and online entities. Visible entry wakes the vehicle; controls wait for online status and valid readings. Cached readings do not prove fresh vehicle measurements.",
         "data": {
           "id": "Panel ID (letters, digits, underscores)",
           "name": "Panel name",
@@ -106,7 +106,9 @@
           "climate_entity": "Climate power control",
           "script_entity": "Leave for Work script",
           "climate_label": "Climate button label",
-          "script_label": "Script button label"
+          "script_label": "Script button label",
+          "wake_entity": "Vehicle wake button (optional)",
+          "awake_entity": "Vehicle online binary sensor (optional)"
         }
       }
     },

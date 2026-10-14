@@ -20,6 +20,12 @@ def validate_panel(value):
         if not isinstance(entity, str) or not re.fullmatch(r"[a-z_][a-z0-9_]*\.[a-z0-9_]+", entity) or len(entity) > 160 or entity.split(".")[0] not in domains:
             raise ValueError("Invalid panel entity")
         result[role] = entity
+    wake, awake = value.get("wake_entity", ""), value.get("awake_entity", "")
+    if wake or awake:
+        for entity, domain in ((wake, "button"), (awake, "binary_sensor")):
+            if not isinstance(entity, str) or len(entity) > 160 or not re.fullmatch(domain + r"\.[a-z0-9_]+", entity):
+                raise ValueError("Configure both vehicle wake and online entities")
+        result.update(wake_entity=wake, awake_entity=awake)
     return result
 
 
@@ -57,11 +63,28 @@ def panel_state(hass, panel):
         feature = 128 if on else 256
         available = available and bool(climate.attributes.get("supported_features", 0) & feature)
     script = hass.states.get(panel["script_entity"])
-    return {"battery": percentage, "climate_on": on, "climate_available": available,
-            "script_available": script is not None and script.state == "off"}
+    result = {"battery": percentage, "climate_on": on, "climate_available": available,
+              "script_available": script is not None and script.state == "off"}
+    if panel.get("wake_entity"):
+        awake = hass.states.get(panel["awake_entity"])
+        online = awake is not None and awake.state == "on"
+        valid_climate = climate is not None and climate.state in (
+            ("off", "heat", "cool", "heat_cool", "auto", "dry", "fan_only")
+            if panel["climate_entity"].startswith("climate.") else ("on", "off"))
+        ready = online and percentage is not None and valid_climate
+        result.update(vehicle_ready=ready, vehicle_online=online)
+        if not ready:
+            result.update(battery=None, climate_on=False, climate_available=False, script_available=False)
+    return result
 
 
 def panel_command(hass, panel, action):
+    if action == "wake" and panel.get("wake_entity"):
+        button = hass.states.get(panel["wake_entity"])
+        # Buttons normally have unknown state until first pressed.
+        if button is not None and button.state != "unavailable":
+            return "button", "press", {"entity_id": panel["wake_entity"]}
+        raise ValueError("Wake unavailable")
     state = panel_state(hass, panel)
     if action in ("climate_on", "climate_off") and state["climate_available"]:
         entity = panel["climate_entity"]

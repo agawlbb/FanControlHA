@@ -90,3 +90,63 @@ async def test_active_panel_form_defaults_to_saved_selection():
     result = await flow.async_step_activate_panel()
     key = next(key for key in result["data_schema"].schema if str(key) == "panel_id")
     assert key.default() == "devices"
+
+
+VEHICLE = {**PANEL, "wake_entity": "button.example_wake", "awake_entity": "binary_sensor.example_online"}
+
+@pytest.mark.parametrize("status", ["off", "unknown", "unavailable", None])
+def test_offline_vehicle_hides_cached_fields_and_blocks_controls(status):
+    hass, _, _, states = with_panel()
+    if status is not None:
+        states["binary_sensor.example_online"] = SimpleNamespace(state=status, attributes={})
+    panel = validate_panel(VEHICLE)
+    value = panel_state(hass, panel)
+    assert value["battery"] is None and not value["vehicle_ready"]
+    assert not value["climate_available"] and not value["script_available"]
+    for action in ("climate_on", "climate_off", "leave"):
+        with pytest.raises(ValueError): panel_command(hass, panel, action)
+
+def test_online_vehicle_requires_valid_fields_without_timestamp_advancement():
+    hass, _, _, states = with_panel()
+    states["binary_sensor.example_online"] = SimpleNamespace(state="on", attributes={})
+    panel = validate_panel(VEHICLE)
+    assert panel_state(hass, panel)["vehicle_ready"]
+    states["climate.example_car"].state = "invalid"
+    assert not panel_state(hass, panel)["vehicle_ready"]
+    states["climate.example_car"].state = "off"
+    states["sensor.example_battery"].state = "unknown"
+    assert not panel_state(hass, panel)["vehicle_ready"]
+
+def test_wake_is_explicit_role_scoped_and_unknown_button_state_is_normal():
+    hass, _, _, states = with_panel()
+    states["button.example_wake"] = SimpleNamespace(state="unknown", attributes={})
+    assert panel_command(hass, validate_panel(VEHICLE), "wake") == ("button", "press", {"entity_id": "button.example_wake"})
+    with pytest.raises(ValueError): panel_command(hass, validate_panel(PANEL), "wake")
+    states["button.example_wake"].state = "unavailable"
+    with pytest.raises(ValueError): panel_command(hass, validate_panel(VEHICLE), "wake")
+    hass.services.async_call.assert_not_awaited()
+
+@pytest.mark.parametrize("fields", [{"wake_entity": "button.example"}, {"awake_entity": "binary_sensor.example"},
+    {"wake_entity": "script.example", "awake_entity": "binary_sensor.example"}])
+def test_partial_or_wrong_vehicle_roles_rejected(fields):
+    with pytest.raises(ValueError): validate_panel({**PANEL, **fields})
+
+@pytest.mark.asyncio
+async def test_vehicle_configuration_and_state_reads_never_wake():
+    hass, manager, watch_id, states = with_panel()
+    manager.watches[watch_id]["panels"] = [validate_panel(VEHICLE)]
+    secret = manager.watches[watch_id]["secret"]
+    for body in ({"action": "config"}, {"action": "panel_state", "panel_id": "work_morning"}):
+        assert (await WatchView(hass).post(request(packet(watch_id, secret, body)))).status == 200
+    hass.services.async_call.assert_not_awaited()
+
+@pytest.mark.asyncio
+async def test_vehicle_wake_uses_approved_button_and_replay_is_rejected():
+    hass, manager, watch_id, states = with_panel()
+    manager.watches[watch_id]["panels"] = [validate_panel(VEHICLE)]
+    states["button.example_wake"] = SimpleNamespace(state="unknown", attributes={})
+    secret = manager.watches[watch_id]["secret"]
+    body = packet(watch_id, secret, {"action": "panel_command", "panel_id": "work_morning", "command": "wake"})
+    assert (await WatchView(hass).post(request(body))).status == 200
+    assert (await WatchView(hass).post(request(body))).status == 403
+    hass.services.async_call.assert_awaited_once_with("button", "press", {"entity_id": "button.example_wake"}, blocking=True, context={"user_id": "example-owner"})

@@ -171,6 +171,8 @@ class FanControlOptions(config_entries.OptionsFlow):
                     raise ValueError("Panel ID cannot change while editing")
                 if any(self.hass.states.get(panel[role]) is None for role in ("battery_entity", "climate_entity", "script_entity")):
                     raise ValueError("Entity not found")
+                if panel.get("wake_entity") and any(self.hass.states.get(panel[role]) is None for role in ("wake_entity", "awake_entity")):
+                    raise ValueError("Vehicle entity not found")
                 battery = self.hass.states.get(panel["battery_entity"])
                 if battery.attributes.get("unit_of_measurement") != "%":
                     raise ValueError("Select a percentage sensor")
@@ -194,6 +196,8 @@ class FanControlOptions(config_entries.OptionsFlow):
             vol.Required("battery_entity", **({"default": existing["battery_entity"]} if existing else {})): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Required("climate_entity", **({"default": existing["climate_entity"]} if existing else {})): selector.EntitySelector(selector.EntitySelectorConfig(domain=["climate", "switch", "input_boolean"])),
             vol.Required("script_entity", **({"default": existing["script_entity"]} if existing else {})): selector.EntitySelector(selector.EntitySelectorConfig(domain="script")),
+            vol.Optional("wake_entity", **({"default": existing["wake_entity"]} if existing.get("wake_entity") else {})): selector.EntitySelector(selector.EntitySelectorConfig(domain="button")),
+            vol.Optional("awake_entity", **({"default": existing["awake_entity"]} if existing.get("awake_entity") else {})): selector.EntitySelector(selector.EntitySelectorConfig(domain="binary_sensor")),
             vol.Required("climate_label", default=existing.get("climate_label", "Climate")): str,
             vol.Required("script_label", default=existing.get("script_label", "Leave for work")): str,
         }))

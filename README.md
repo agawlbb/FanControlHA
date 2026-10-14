@@ -70,3 +70,10 @@ Live verification on Home Assistant 2026.10.1 also confirmed integration loading
 ## Removing watch devices
 
 Open a Fan Control watch device in **Settings → Devices & services → Devices**, then choose **Delete** from its menu. HA removes its registry device and associated entities; the integration first revokes its watch credential and pending pairing handoff. This also works for previously revoked, unavailable watch devices. Removing the active watch requires pairing it again before use.
+
+
+## Optional vehicle wake on visible entry
+
+Edit a Work Morning panel and select both **Vehicle wake button** and **Vehicle online binary sensor** for the same vehicle. Leave both unset for an ordinary panel. The online binary sensor must be `on` only when the vehicle is online. The watch presses the approved wake button once on settled visible entry, then makes read-only readiness checks for up to 30 seconds (an in-flight bounded network call may finish later). Leaving cancels further work; an already-dispatched wake cannot be recalled. Refresh and normal visible polls never repeat wake; leave and re-enter to start another attempt. No configuration/background/prefetch request wakes a vehicle.
+
+Vehicle readings and actions remain hidden/disabled until a subsequent HA read reports online status and valid battery/climate fields. Actions are revalidated by HA before dispatch. Tessie may supply cached values: this confirms online status plus valid HA fields, **not fresh vehicle measurements**. No source timestamp is inferred from HA `last_updated` or `last_reported`. An unknown wake-button state is normal. Existing panels need the optional roles configured to enable this behavior; no personal entity IDs are compiled into either project.
