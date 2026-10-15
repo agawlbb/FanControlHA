@@ -16,6 +16,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import DOMAIN
 from .panels import configuration, find_panel, panel_state, panel_command
+from .exercise import execute_exercise
 from .manager import Manager
 from .protocol import devices, seal_response
 
@@ -199,10 +200,13 @@ class WatchView(HomeAssistantView):
                     result = configuration(watch)
                 elif action in ("panel_state", "panel_command"):
                     panel = find_panel(watch, body.get("panel_id"))
-                    if action == "panel_command":
-                        domain, service, data = panel_command(self.hass, panel, body.get("command"))
-                        await self.hass.services.async_call(domain, service, data, blocking=True, context=Context(user_id=owner.id))
-                    result = panel_state(self.hass, panel)
+                    if action == "panel_command" and panel.get("type") == "exercise" and body.get("command") != "wake":
+                        result = await execute_exercise(self.hass, panel, body.get("command"), Context(user_id=owner.id))
+                    else:
+                        if action == "panel_command":
+                            domain, service, data = panel_command(self.hass, panel, body.get("command"))
+                            await self.hass.services.async_call(domain, service, data, blocking=True, context=Context(user_id=owner.id))
+                        result = panel_state(self.hass, panel)
                 elif action in ("state", "command"):
                     entity = body.get("entity")
                     if entity not in devices([item["entity"] for item in watch["devices"]]):

@@ -73,7 +73,8 @@
           "add_panel": "Add Work Morning panel",
           "edit_panel": "Edit a panel",
           "remove_panel": "Remove a panel",
-          "activate_panel": "Select active panel"
+          "activate_panel": "Select active panel",
+          "add_exercise": "Add Exercise panel"
         }
       },
       "edit_panel": {
@@ -109,6 +110,18 @@
           "script_label": "Script button label",
           "wake_entity": "Vehicle wake button (optional)",
           "awake_entity": "Vehicle online binary sensor (optional)"
+        }
+      },
+      "exercise": {
+        "title": "Exercise panel",
+        "description": "Select all entities for the same car. Start locks it and opens Spotify on the watch without playing. Stop requests unlock, climate on and exactly 63\u00b0F where supported. Spotify pause is watch-local and requires optional notification access on the watch.",
+        "data": {
+          "id": "Panel ID",
+          "name": "Panel name",
+          "lock_entity": "Car door lock",
+          "climate_entity": "Car climate",
+          "wake_entity": "Car wake button",
+          "awake_entity": "Car online binary sensor"
         }
       }
     },

@@ -1,9 +1,12 @@
 """Typed, user-configured panels. Entity permissions remain server-side."""
 import math
 import re
+from .exercise import validate_exercise, exercise_state
 
 
 def validate_panel(value):
+    if isinstance(value, dict) and value.get("type") == "exercise":
+        return validate_exercise(value)
     if not isinstance(value, dict) or value.get("type", "work_morning") != "work_morning":
         raise ValueError("Unsupported panel")
     result = {"type": "work_morning"}
@@ -46,6 +49,8 @@ def configuration(watch):
 
 
 def panel_state(hass, panel):
+    if panel.get("type") == "exercise":
+        return exercise_state(hass, panel)
     battery = hass.states.get(panel["battery_entity"])
     percentage = None
     if battery and battery.attributes.get("unit_of_measurement") == "%":

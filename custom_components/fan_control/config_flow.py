@@ -136,7 +136,7 @@ class FanControlOptions(config_entries.OptionsFlow):
         return self.async_show_form(step_id="panels", data_schema=vol.Schema({vol.Required("watch_id"): self.watch_selector()}))
 
     async def async_step_panel_menu(self, user_input=None):
-        return self.async_show_menu(step_id="panel_menu", menu_options=["add_panel", "edit_panel", "remove_panel", "activate_panel"])
+        return self.async_show_menu(step_id="panel_menu", menu_options=["add_panel", "add_exercise", "edit_panel", "remove_panel", "activate_panel"])
 
     async def async_step_add_panel(self, user_input=None):
         self.editing_panel = None
@@ -156,7 +156,8 @@ class FanControlOptions(config_entries.OptionsFlow):
             return self.async_abort(reason="no_panels")
         if user_input is not None:
             self.editing_panel = user_input["panel_id"]
-            return await self.async_step_panel()
+            selected = next(item for item in watch["panels"] if item["id"] == self.editing_panel)
+            return await (self.async_step_exercise() if selected.get("type") == "exercise" else self.async_step_panel())
         return self.async_show_form(step_id="edit_panel", data_schema=vol.Schema({vol.Required("panel_id"): self.panel_selector()}))
 
     async def async_step_panel(self, user_input=None):
@@ -230,3 +231,41 @@ class FanControlOptions(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data={})
         watch = runtime["manager"].watches[self.watch_id]
         return self.async_show_form(step_id="activate_panel", data_schema=vol.Schema({vol.Required("panel_id", default=watch.get("active_panel") or "devices"): self.panel_selector(True)}))
+
+
+    async def async_step_add_exercise(self, user_input=None):
+        self.editing_panel = None
+        return await self.async_step_exercise()
+
+    async def async_step_exercise(self, user_input=None):
+        runtime = self.hass.data[DOMAIN]
+        watch = runtime["manager"].watches[self.watch_id]
+        existing = next((item for item in watch.get("panels", []) if item["id"] == self.editing_panel), {})
+        errors = {}
+        if user_input is not None:
+            try:
+                panel = validate_panel({**user_input, "type": "exercise"})
+                if self.editing_panel and panel["id"] != self.editing_panel:
+                    raise ValueError("Keep panel ID")
+                if any(self.hass.states.get(panel[role]) is None for role in ("lock_entity", "climate_entity", "wake_entity", "awake_entity")):
+                    raise ValueError("Entity not found")
+                async with runtime["lock"]:
+                    current = runtime["manager"].watches[self.watch_id]
+                    panels = list(current.get("panels", []))
+                    if not self.editing_panel and any(item["id"] == panel["id"] for item in panels):
+                        raise ValueError("Duplicate ID")
+                    panels = [item for item in panels if item["id"] != self.editing_panel] + [panel]
+                    if len(panels) > 8 or len(panels) + len(current["devices"]) > 16:
+                        raise ValueError("Too many pages")
+                    current["panels"] = panels
+                    current["revision"] += 1
+                    await save(runtime)
+                    async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
+                return self.async_create_entry(title="", data={})
+            except (ValueError, KeyError):
+                errors["base"] = "invalid_panel"
+        fields = {vol.Required("id", default=existing.get("id", "exercise")): str,
+                  vol.Required("name", default=existing.get("name", "Exercise")): str}
+        for role, domain in (("lock_entity", "lock"), ("climate_entity", "climate"), ("wake_entity", "button"), ("awake_entity", "binary_sensor")):
+            fields[vol.Required(role, **({"default": existing[role]} if role in existing else {}))] = selector.EntitySelector(selector.EntitySelectorConfig(domain=domain))
+        return self.async_show_form(step_id="exercise", errors=errors, data_schema=vol.Schema(fields))
