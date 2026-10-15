@@ -16,7 +16,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import DOMAIN
 from .panels import configuration, find_panel, panel_state, panel_command
-from .exercise import execute_exercise
+from .exercise import execute_exercise, retry_stop, cancel_stop, accept_stop
 from .manager import Manager
 from .protocol import devices, seal_response
 
@@ -74,7 +74,14 @@ async def async_unload_entry(hass, entry):
         return False
     hass.services.async_remove(DOMAIN, "set_active_device")
     hass.services.async_remove(DOMAIN, "set_active_panel")
-    hass.data.pop(DOMAIN, None)
+    runtime = hass.data.pop(DOMAIN, None)
+    if runtime:
+        tasks = [op.get("task") for op in runtime.get("exercise_operations", {}).values() if op.get("task") is not None]
+        runtime.get("exercise_operations", {}).clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
     return True
 
 
@@ -201,7 +208,20 @@ class WatchView(HomeAssistantView):
                 elif action in ("panel_state", "panel_command"):
                     panel = find_panel(watch, body.get("panel_id"))
                     if action == "panel_command" and panel.get("type") == "exercise" and body.get("command") != "wake":
-                        result = await execute_exercise(self.hass, panel, body.get("command"), Context(user_id=owner.id))
+                        operations = runtime.setdefault("exercise_operations", {})
+                        operation_key = (packet["watch_id"], panel["id"])
+                        if body.get("command") == "stop_exercise" and "operation_id" in body:
+                            result = await accept_stop(self.hass, runtime, panel, Context(user_id=owner.id), operation_key, body)
+                        elif body.get("command") == "cancel_stop":
+                            current = operations.get(operation_key, {})
+                            identity = body.get("operation_id")
+                            if isinstance(identity, str) and len(identity) == 36 and (not current or current.get("id") == identity):
+                                cancel_stop(operations, operation_key, identity=identity)
+                            result = {"operation_status":"cancelled", "steps":[]}
+                        else:
+                            if body.get("command") == "start_exercise":
+                                cancel_stop(operations, operation_key)
+                            result = await execute_exercise(self.hass, panel, body.get("command"), Context(user_id=owner.id))
                     else:
                         if action == "panel_command":
                             domain, service, data = panel_command(self.hass, panel, body.get("command"))

@@ -139,3 +139,117 @@ async def execute_exercise(hass, panel, action, context):
     result = exercise_state(hass, panel)
     result["steps"] = results
     return result
+
+
+# Ephemeral request-driven retry state. Nothing is scheduled or persisted for replay.
+import time
+STOP_SERVER_STARTED_MS = int(time.time() * 1000)
+
+
+async def retry_stop(hass, panel, context, operations, key, body, now_ms=None):
+    now = int(time.time() * 1000) if now_ms is None else now_ms
+    identity, issued = body.get("operation_id"), body.get("issued_at_ms")
+    if not isinstance(identity, str) or not re.fullmatch(r"[a-f0-9-]{36}", identity) or type(issued) is not int:
+        raise ValueError("Invalid Stop operation")
+    # Reject old requests after HA restart, expiry, or a newer user action.
+    if issued < STOP_SERVER_STARTED_MS or issued > now + 5000 or now >= issued + 120000:
+        return {"operation_status":"expired", "steps":[]}
+    if body.get("panel_config") != panel:
+        raise ValueError("Exercise target changed")
+    previous = operations.get(key)
+    if previous and (identity in previous.get("blocked", set()) or issued <= previous.get("cancelled_at", -1) or issued < previous["issued"]):
+        return {"operation_status":"cancelled", "steps":[]}
+    if previous and previous.get("id") == identity:
+        operation = previous
+        if operation["panel"] != panel or operation["issued"] != issued:
+            raise ValueError("Exercise target changed")
+    else:
+        if previous and issued == previous["issued"]:
+            return {"operation_status":"cancelled", "steps":[]}
+        operation = {"id":identity, "issued":issued, "panel":dict(panel), "done":set(), "next":0, "attempts":0, "blocked": previous.get("blocked", set()) if previous else set()}
+        operations[key] = operation
+    if operation.get("complete"):
+        return {"operation_status":"complete", "steps":[{"step":s,"status":"confirmed"} for s in ("unlock","turn_on","set_temperature")]}
+    state = exercise_state(hass, panel)
+    if not state["vehicle_ready"]:
+        return {"operation_status":"pending", "steps":[], "message":"Waiting for vehicle"}
+    if not state["stop_available"]:
+        return {"operation_status":"unsupported", "steps":[], "message":"Temperature or climate capability unsupported"}
+    climate = hass.states.get(panel["climate_entity"])
+    attrs = climate.attributes
+    target = target_temperature(climate_unit(hass, attrs), attrs.get("min_temp"), attrs.get("max_temp"))
+    lock = hass.states.get(panel["lock_entity"])
+    desired = {"unlock": lock.state == "unlocked", "turn_on": climate.state != "off",
+               "set_temperature": isinstance(attrs.get("temperature"), (int,float)) and not isinstance(attrs.get("temperature"), bool)
+                    and math.isclose(attrs["temperature"], target, abs_tol=0.01)}
+    operation["done"].update(step for step, satisfied in desired.items() if satisfied)
+    names = ("unlock", "turn_on", "set_temperature")
+    if len(operation["done"]) == 3:
+        operation["complete"] = True
+        return {"operation_status":"complete", "steps":[{"step":s,"status":"confirmed"} for s in names]}
+    results = []
+    allowed = now >= operation["next"]
+    operation["attempts"] += int(allowed)
+    if allowed:
+        operation["next"] = now + min(15000, 2000 * 2 ** min(operation["attempts"], 3))
+    commands = {"unlock":("lock","unlock",{"entity_id":panel["lock_entity"]}),
+                "turn_on":("climate","turn_on",{"entity_id":panel["climate_entity"]}),
+                "set_temperature":("climate","set_temperature",{"entity_id":panel["climate_entity"],"temperature":target})}
+    for step in names:
+        if step in operation["done"]:
+            results.append({"step":step,"status":"confirmed"}); continue
+        if not allowed:
+            results.append({"step":step,"status":"pending"}); continue
+        try:
+            if (int(time.time()*1000) if now_ms is None else now) >= issued + 120000:
+                return {"operation_status":"expired", "steps":results}
+            online = hass.states.get(panel["awake_entity"])
+            if online is None or online.state != "on": raise ValueError("Offline")
+            domain, service, data = commands[step]
+            await hass.services.async_call(domain, service, data, blocking=True, context=context)
+            results.append({"step":step,"status":"requested"})
+        except Exception:
+            results.append({"step":step,"status":"unconfirmed"})
+            allowed = False
+    return {"operation_status":"pending", "steps":results}
+
+
+def cancel_stop(operations, key, now_ms=None, identity=None):
+    now = int(time.time()*1000) if now_ms is None else now_ms
+    previous = operations.get(key, {})
+    blocked = set(previous.get("blocked", set()))
+    if previous.get("id"): blocked.add(previous["id"])
+    if identity: blocked.add(identity)
+    # Only short-lived operations are valid; cap memory without creating a retry queue.
+    if len(blocked) > 32: blocked = {value for value in (previous.get("id"), identity) if value}
+    operations[key] = {"id":None, "issued":now, "cancelled_at":now, "blocked":blocked}
+
+
+async def accept_stop(hass, runtime, panel, context, key, body):
+    import asyncio
+    operations = runtime.setdefault("exercise_operations", {})
+    result = await retry_stop(hass, panel, context, operations, key, body)
+    operation = operations.get(key)
+    if result["operation_status"] != "pending" or operation is None or operation.get("task") is not None:
+        return result
+    expected_owner = runtime["manager"].watches[key[0]]["owner_id"]
+    async def continue_stop():
+        try:
+            for _ in range(30):
+                await asyncio.sleep(4)
+                async with runtime["lock"]:
+                    if operations.get(key) is not operation:
+                        return
+                    watch = runtime["manager"].watches.get(key[0])
+                    if watch is None or watch["owner_id"] != expected_owner or next((p for p in watch.get("panels", []) if p.get("id")==key[1]), None) != panel:
+                        cancel_stop(operations,key); return
+                    owner = await hass.auth.async_get_user(watch["owner_id"])
+                    if owner is None or not owner.is_active or not owner.is_admin:
+                        cancel_stop(operations,key); return
+                    update = await retry_stop(hass,panel,context,operations,key,body)
+                    if update["operation_status"] != "pending":
+                        return
+        finally:
+            operation["task"] = None
+    operation["task"] = asyncio.create_task(continue_stop())
+    return result

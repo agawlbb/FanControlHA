@@ -163,3 +163,82 @@ async def test_off_climate_without_turn_on_support_does_not_unlock():
     assert not exercise_state(hass, PANEL)["stop_available"]
     with pytest.raises(ValueError): await execute_exercise(hass, PANEL, "stop_exercise", None)
     hass.services.async_call.assert_not_awaited()
+
+
+from custom_components.fan_control.exercise import retry_stop, cancel_stop, accept_stop, STOP_SERVER_STARTED_MS
+
+def operation_body(issued):
+    return {"operation_id":"12345678-1234-1234-1234-123456789abc", "issued_at_ms":issued, "panel_config":PANEL}
+
+@pytest.mark.asyncio
+async def test_retry_reconciles_ambiguous_unlock_and_only_retries_unfinished_steps():
+    hass, states = fixture(); operations = {}; now = STOP_SERVER_STARTED_MS + 10
+    async def ambiguous(domain, service, *args, **kwargs):
+        if service == "unlock":
+            states["lock.example"].state = "unlocked"
+            raise RuntimeError("lost response")
+    hass.services.async_call.side_effect = ambiguous
+    body = operation_body(now)
+    first = await retry_stop(hass,PANEL,None,operations,"watch",body,now)
+    assert first["steps"][0]["status"] == "unconfirmed"
+    hass.services.async_call.reset_mock(); hass.services.async_call.side_effect=None
+    await retry_stop(hass,PANEL,None,operations,"watch",body,now+5000)
+    assert [c.args[:2] for c in hass.services.async_call.await_args_list] == [("climate","turn_on"),("climate","set_temperature")]
+    states["climate.example"].state="cool"; states["climate.example"].attributes["temperature"]=63
+    hass.services.async_call.reset_mock()
+    assert (await retry_stop(hass,PANEL,None,operations,"watch",body,now+6000))["operation_status"] == "complete"
+    assert (await retry_stop(hass,PANEL,None,operations,"watch",body,now+7000))["operation_status"] == "complete"
+    hass.services.async_call.assert_not_awaited()
+
+@pytest.mark.asyncio
+async def test_duplicate_requests_backoff_without_duplicate_service_calls():
+    hass, _ = fixture(); operations={}; now=STOP_SERVER_STARTED_MS+10; body=operation_body(now)
+    await retry_stop(hass,PANEL,None,operations,"watch",body,now)
+    count=hass.services.async_call.await_count
+    for delta in (1,100,1000): await retry_stop(hass,PANEL,None,operations,"watch",body,now+delta)
+    assert hass.services.async_call.await_count==count
+
+@pytest.mark.asyncio
+async def test_expiry_restart_and_start_cancel_prevent_delayed_unlock():
+    hass,_=fixture(); operations={}; now=STOP_SERVER_STARTED_MS+10; body=operation_body(now)
+    assert (await retry_stop(hass,PANEL,None,operations,"watch",body,now+120000))["operation_status"]=="expired"
+    assert (await retry_stop(hass,PANEL,None,operations,"watch",operation_body(STOP_SERVER_STARTED_MS-1),now))["operation_status"]=="expired"
+    cancel_stop(operations,"watch",now+100)
+    assert (await retry_stop(hass,PANEL,None,operations,"watch",body,now+101))["operation_status"]=="cancelled"
+    hass.services.async_call.assert_not_awaited()
+
+@pytest.mark.asyncio
+async def test_retry_rejects_changed_target_and_unsupported_precision_before_unlock():
+    hass,states=fixture(); operations={}; now=STOP_SERVER_STARTED_MS+10; body=operation_body(now)
+    with pytest.raises(ValueError): await retry_stop(hass,PANEL,None,operations,"watch",{**body,"panel_config":{**PANEL,"lock_entity":"lock.other"}},now)
+    states["climate.example"].attributes.update(temperature_unit="°C",min_temp=16,max_temp=30,target_temp_step=0.5)
+    assert (await retry_stop(hass,PANEL,None,operations,"watch",body,now))["operation_status"]=="unsupported"
+    hass.services.async_call.assert_not_awaited()
+
+@pytest.mark.asyncio
+async def test_accepted_operation_continues_without_watch_requests(monkeypatch):
+    import asyncio
+    from .test_api import runtime
+    hass,manager,watch_id,_=runtime(); _,states=fixture(); hass.states.get=states.get
+    manager.watches[watch_id]["panels"]=[PANEL]
+    runtime_value=hass.data["fan_control"]
+    now=max(STOP_SERVER_STARTED_MS,int(__import__("time").time()*1000))
+    body=operation_body(now)
+    async def tick(seconds):
+        states["lock.example"].state="unlocked"
+        states["climate.example"].state="cool"
+        states["climate.example"].attributes["temperature"]=63
+    monkeypatch.setattr(asyncio,"sleep",tick)
+    result=await accept_stop(hass,runtime_value,PANEL,None,(watch_id,PANEL["id"]),body)
+    assert result["operation_status"]=="pending"
+    task=runtime_value["exercise_operations"][(watch_id,PANEL["id"])]["task"]
+    await task
+    assert runtime_value["exercise_operations"][(watch_id,PANEL["id"])]["complete"]
+
+
+@pytest.mark.asyncio
+async def test_cancel_before_delayed_delivery_blocks_same_id_despite_clock_skew():
+    hass,_=fixture(); operations={}; now=STOP_SERVER_STARTED_MS+10; body=operation_body(now+2000)
+    cancel_stop(operations,"watch",now,identity=body["operation_id"])
+    assert (await retry_stop(hass,PANEL,None,operations,"watch",body,now+3000))["operation_status"]=="cancelled"
+    hass.services.async_call.assert_not_awaited()
