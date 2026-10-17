@@ -1,7 +1,7 @@
 {
   "domain": "fan_control",
   "name": "Fan Control",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "config_flow": true,
   "documentation": "https://github.com/agawlbb/FanControlHA",
   "issue_tracker": "https://github.com/agawlbb/FanControlHA/issues",
