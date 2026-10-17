@@ -114,14 +114,17 @@
       },
       "exercise": {
         "title": "Exercise panel",
-        "description": "Select all entities for the same car. Start locks it and opens Spotify on the watch without playing. Stop requests unlock, climate on and exactly 63\u00b0F where supported. Spotify pause is watch-local and requires optional notification access on the watch.",
+        "description": "Select all vehicle entities for the same car. Start locks the car and opens Spotify on the watch. Optional Spotify settings request the playlist with shuffle off through HA. A blank source uses Spotify's active device, which may be another device; opening the watch app does not guarantee transfer. Stop unlocks, turns climate on, sets 63°F, and requests watch-local Spotify pause.",
         "data": {
           "id": "Panel ID",
           "name": "Panel name",
           "lock_entity": "Car door lock",
           "climate_entity": "Car climate",
           "wake_entity": "Car wake button",
-          "awake_entity": "Car online binary sensor"
+          "awake_entity": "Car online binary sensor",
+          "spotify_entity": "Spotify media player (optional)",
+          "spotify_playlist": "Spotify playlist link or URI (optional)",
+          "spotify_source": "Spotify source name (optional; blank uses active device)"
         }
       }
     },

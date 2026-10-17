@@ -75,7 +75,48 @@ def validate_exercise(value):
     if not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", result["id"]) or result["id"] == "devices":
         raise ValueError("Invalid Exercise ID")
     result.update(vars(targets))
+    player, playlist = value.get("spotify_entity", ""), value.get("spotify_playlist", "")
+    if player or playlist:
+        if not isinstance(player, str) or not re.fullmatch(r"media_player\.[a-z0-9_]+", player):
+            raise ValueError("Select a Spotify player")
+        from urllib.parse import urlparse
+        if not isinstance(playlist, str):
+            raise ValueError("Invalid playlist")
+        if playlist.startswith("https://open.spotify.com/"):
+            playlist = "spotify:" + urlparse(playlist).path.strip("/").replace("/", ":")
+        if not re.fullmatch(r"spotify:playlist:[A-Za-z0-9]{22}", playlist):
+            raise ValueError("Invalid playlist")
+        source = value.get("spotify_source", "")
+        if not isinstance(source, str) or len(source) > 160:
+            raise ValueError("Invalid Spotify source")
+        result.update(spotify_entity=player, spotify_playlist=playlist, spotify_source=source.strip())
     return result
+
+
+async def start_music(hass, panel, context):
+    """One explicit Start tap, separate from vehicle retries; use existing HA authorization."""
+    panel = validate_exercise(panel)
+    entity = panel.get("spotify_entity")
+    if not entity:
+        return {"music_status": "not_configured"}
+    player = hass.states.get(entity)
+    if player is None or player.state in ("unknown", "unavailable"):
+        return {"music_status": "unavailable"}
+    source = panel.get("spotify_source", "")
+    if source and source not in player.attributes.get("source_list", []):
+        return {"music_status": "source_unavailable"}
+    target = {"entity_id": entity}
+    try:
+        if source:
+            await hass.services.async_call("media_player", "select_source", {**target, "source": source}, blocking=True, context=context)
+        await hass.services.async_call("media_player", "shuffle_set", {**target, "shuffle": False}, blocking=True, context=context)
+        await hass.services.async_call("media_player", "play_media", {**target,
+            "media_content_id": panel["spotify_playlist"], "media_content_type": "playlist"}, blocking=True, context=context)
+        await hass.services.async_call("media_player", "shuffle_set", {**target, "shuffle": False}, blocking=True, context=context)
+        return {"music_status": "requested"}
+    except Exception:
+        # Do not replay an ambiguous playlist request or expose account details.
+        return {"music_status": "unconfirmed"}
 
 
 def climate_unit(hass, attributes):
@@ -154,7 +195,9 @@ async def retry_stop(hass, panel, context, operations, key, body, now_ms=None):
     # Reject old requests after HA restart, expiry, or a newer user action.
     if issued < STOP_SERVER_STARTED_MS or issued > now + 5000 or now >= issued + 120000:
         return {"operation_status":"expired", "steps":[]}
-    if body.get("panel_config") != panel:
+    # Music is independent of Stop's physical-role snapshot. Older watch models omit it.
+    vehicle_panel = {key: value for key, value in panel.items() if not key.startswith("spotify_")}
+    if body.get("panel_config") not in (panel, vehicle_panel):
         raise ValueError("Exercise target changed")
     previous = operations.get(key)
     if previous and (identity in previous.get("blocked", set()) or issued <= previous.get("cancelled_at", -1) or issued < previous["issued"]):

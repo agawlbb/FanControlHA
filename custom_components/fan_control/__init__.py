@@ -210,7 +210,10 @@ class WatchView(HomeAssistantView):
                     if action == "panel_command" and panel.get("type") == "exercise" and body.get("command") != "wake":
                         operations = runtime.setdefault("exercise_operations", {})
                         operation_key = (packet["watch_id"], panel["id"])
-                        if body.get("command") == "stop_exercise" and "operation_id" in body:
+                        if body.get("command") == "start_music":
+                            from .exercise import start_music
+                            result = await start_music(self.hass, panel, Context(user_id=owner.id))
+                        elif body.get("command") == "stop_exercise" and "operation_id" in body:
                             result = await accept_stop(self.hass, runtime, panel, Context(user_id=owner.id), operation_key, body)
                         elif body.get("command") == "cancel_stop":
                             current = operations.get(operation_key, {})

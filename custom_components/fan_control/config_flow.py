@@ -268,4 +268,7 @@ class FanControlOptions(config_entries.OptionsFlow):
                   vol.Required("name", default=existing.get("name", "Exercise")): str}
         for role, domain in (("lock_entity", "lock"), ("climate_entity", "climate"), ("wake_entity", "button"), ("awake_entity", "binary_sensor")):
             fields[vol.Required(role, **({"default": existing[role]} if role in existing else {}))] = selector.EntitySelector(selector.EntitySelectorConfig(domain=domain))
+        fields[vol.Optional("spotify_entity", **({"default": existing["spotify_entity"]} if existing.get("spotify_entity") else {}))] = selector.EntitySelector(selector.EntitySelectorConfig(domain="media_player"))
+        fields[vol.Optional("spotify_playlist", default=existing.get("spotify_playlist", ""))] = str
+        fields[vol.Optional("spotify_source", default=existing.get("spotify_source", ""))] = str
         return self.async_show_form(step_id="exercise", errors=errors, data_schema=vol.Schema(fields))
