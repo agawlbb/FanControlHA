@@ -77,6 +77,7 @@ async def async_unload_entry(hass, entry):
     runtime = hass.data.pop(DOMAIN, None)
     if runtime:
         tasks = [op.get("task") for op in runtime.get("exercise_operations", {}).values() if op.get("task") is not None]
+        tasks.extend(runtime.get("music_tasks", {}).values())
         runtime.get("exercise_operations", {}).clear()
         for task in tasks:
             task.cancel()
@@ -211,9 +212,12 @@ class WatchView(HomeAssistantView):
                         operations = runtime.setdefault("exercise_operations", {})
                         operation_key = (packet["watch_id"], panel["id"])
                         if body.get("command") == "start_music":
-                            from .exercise import start_music
-                            result = await start_music(self.hass, panel, Context(user_id=owner.id))
+                            from .exercise import schedule_music
+                            result = schedule_music(self.hass, runtime, packet["watch_id"], panel, Context(user_id=owner.id))
                         elif body.get("command") == "stop_exercise" and "operation_id" in body:
+                            pending_music = runtime.get("music_tasks", {}).pop(operation_key, None)
+                            if pending_music is not None:
+                                pending_music.cancel()
                             result = await accept_stop(self.hass, runtime, panel, Context(user_id=owner.id), operation_key, body)
                         elif body.get("command") == "cancel_stop":
                             current = operations.get(operation_key, {})

@@ -93,6 +93,41 @@ def validate_exercise(value):
     return result
 
 
+def schedule_music(hass, runtime, watch_id, panel, context):
+    """Give the watch ten seconds to establish playback, without delaying car controls."""
+    import asyncio
+    from .const import DOMAIN
+    tasks = runtime.setdefault("music_tasks", {})
+    key = (watch_id, panel["id"])
+    previous = tasks.pop(key, None)
+    if previous is not None:
+        previous.cancel()
+    watch = runtime["manager"].watches[watch_id]
+    expected_owner = watch["owner_id"]
+    expected_panel = dict(panel)
+
+    async def deliver():
+        await asyncio.sleep(10)
+        async with runtime["lock"]:
+            if hass.data.get(DOMAIN) is not runtime:
+                return
+            current = runtime["manager"].watches.get(watch_id)
+            owner = await hass.auth.async_get_user(expected_owner)
+            if (current is None or current["owner_id"] != expected_owner
+                    or owner is None or not owner.is_active or not owner.is_admin
+                    or next((p for p in current.get("panels", []) if p.get("id") == panel["id"]), None) != expected_panel):
+                return
+            await start_music(hass, expected_panel, context)
+
+    task = hass.async_create_task(deliver(), "Fan Control delayed music")
+    tasks[key] = task
+    def finished(completed):
+        if tasks.get(key) is completed:
+            tasks.pop(key, None)
+    task.add_done_callback(finished)
+    return {"music_status": "scheduled"}
+
+
 async def start_music(hass, panel, context):
     """One explicit Start tap, separate from vehicle retries; use existing HA authorization."""
     panel = validate_exercise(panel)

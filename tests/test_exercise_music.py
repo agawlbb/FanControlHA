@@ -62,3 +62,32 @@ async def test_music_settings_do_not_invalidate_watch_stop_role_snapshot():
     assert result["operation_status"] == "pending"
     body["panel_config"]["lock_entity"] = "lock.changed"
     with pytest.raises(ValueError): await retry_stop(instance,panel(),None,{},"watch",body,now)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("revoke", [False, True])
+async def test_delayed_music_waits_ten_seconds_and_rechecks_permission(revoke):
+    import asyncio
+    from unittest.mock import patch
+    from custom_components.fan_control.exercise import schedule_music
+    instance = hass()
+    selected = panel()
+    runtime = {"lock":asyncio.Lock(), "manager":SimpleNamespace(watches={"watch":{
+        "owner_id":"owner", "panels":[selected]}})}
+    instance.data = {"fan_control":runtime}
+    instance.auth = SimpleNamespace(async_get_user=AsyncMock(return_value=SimpleNamespace(is_active=True,is_admin=True)))
+    instance.async_create_task = lambda coroutine, name: asyncio.create_task(coroutine)
+    waiting, release = asyncio.Event(), asyncio.Event()
+    async def delay(seconds):
+        assert seconds == 10
+        waiting.set()
+        await release.wait()
+    with patch("asyncio.sleep", new=delay):
+        assert schedule_music(instance,runtime,"watch",selected,None) == {"music_status":"scheduled"}
+        task = runtime["music_tasks"][("watch",selected["id"])]
+        await waiting.wait()
+        instance.services.async_call.assert_not_awaited()
+        if revoke:
+            runtime["manager"].watches.clear()
+        release.set()
+        await task
+    assert instance.services.async_call.await_count == (0 if revoke else 3)
