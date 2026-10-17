@@ -65,7 +65,7 @@ async def test_music_settings_do_not_invalidate_watch_stop_role_snapshot():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("revoke", [False, True])
-async def test_delayed_music_waits_ten_seconds_and_rechecks_permission(revoke):
+async def test_delayed_music_waits_five_seconds_and_rechecks_permission(revoke):
     import asyncio
     from unittest.mock import patch
     from custom_components.fan_control.exercise import schedule_music
@@ -78,7 +78,7 @@ async def test_delayed_music_waits_ten_seconds_and_rechecks_permission(revoke):
     instance.async_create_task = lambda coroutine, name: asyncio.create_task(coroutine)
     waiting, release = asyncio.Event(), asyncio.Event()
     async def delay(seconds):
-        assert seconds == 10
+        assert seconds == 5
         waiting.set()
         await release.wait()
     with patch("asyncio.sleep", new=delay):

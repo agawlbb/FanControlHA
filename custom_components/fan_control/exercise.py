@@ -94,7 +94,7 @@ def validate_exercise(value):
 
 
 def schedule_music(hass, runtime, watch_id, panel, context):
-    """Give the watch ten seconds to establish playback, without delaying car controls."""
+    """Give the watch five seconds to establish playback, without delaying car controls."""
     import asyncio
     from .const import DOMAIN
     tasks = runtime.setdefault("music_tasks", {})
@@ -107,7 +107,7 @@ def schedule_music(hass, runtime, watch_id, panel, context):
     expected_panel = dict(panel)
 
     async def deliver():
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
         async with runtime["lock"]:
             if hass.data.get(DOMAIN) is not runtime:
                 return
