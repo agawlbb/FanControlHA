@@ -74,7 +74,8 @@
           "edit_panel": "Edit a panel",
           "remove_panel": "Remove a panel",
           "activate_panel": "Select active panel",
-          "add_exercise": "Add Exercise panel"
+          "add_exercise": "Add Exercise panel",
+          "add_driving": "Add Driving panel"
         }
       },
       "edit_panel": {
@@ -109,7 +110,8 @@
           "climate_label": "Climate button label",
           "script_label": "Script button label",
           "wake_entity": "Vehicle wake button (optional)",
-          "awake_entity": "Vehicle online binary sensor (optional)"
+          "awake_entity": "Vehicle online binary sensor (optional)",
+          "color": "Car identification color"
         }
       },
       "exercise": {
@@ -124,7 +126,22 @@
           "awake_entity": "Car online binary sensor",
           "spotify_entity": "Spotify media player (optional)",
           "spotify_playlist": "Spotify playlist link or URI (optional)",
-          "spotify_source": "Spotify source name (optional; blank uses active device)"
+          "spotify_source": "Spotify source name (optional; blank uses active device)",
+          "color": "Car identification color"
+        }
+      },
+      "driving": {
+        "title": "Driving panel",
+        "description": "Choose distinct garage and powered-trunk cover entities that support explicit Open and Close, plus climate, wake and online roles for the same vehicle. Visible entry requests wake. Trunk initially displays CLOSED in gray, and its first tap requests OPEN without waiting for state confirmation. Gray requested outcomes become confirmed colors only after matching HA state. Unknown garage state disables its toggle until read. No configuration/background request wakes the car.",
+        "data": {
+          "id": "Panel ID",
+          "name": "Panel name",
+          "garage_entity": "Garage door cover",
+          "trunk_entity": "Vehicle trunk cover",
+          "climate_entity": "Vehicle climate",
+          "wake_entity": "Vehicle wake button",
+          "awake_entity": "Vehicle online binary sensor",
+          "color": "Car identification color"
         }
       }
     },

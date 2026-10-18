@@ -208,6 +208,8 @@ class WatchView(HomeAssistantView):
                     result = configuration(watch)
                 elif action in ("panel_state", "panel_command"):
                     panel = find_panel(watch, body.get("panel_id"))
+                    if panel.get("type") == "driving" and action == "panel_command" and body.get("panel_config") != panel:
+                        raise ValueError("Driving target changed")
                     if action == "panel_command" and panel.get("type") == "exercise" and body.get("command") != "wake":
                         operations = runtime.setdefault("exercise_operations", {})
                         operation_key = (packet["watch_id"], panel["id"])

@@ -6,6 +6,7 @@ Watch-local Spotify launch and the still-unresolved pause target are not HA comm
 from dataclasses import dataclass
 import math
 import re
+from .panel_color import add_color
 
 
 @dataclass(frozen=True)
@@ -90,7 +91,7 @@ def validate_exercise(value):
         if not isinstance(source, str) or len(source) > 160:
             raise ValueError("Invalid Spotify source")
         result.update(spotify_entity=player, spotify_playlist=playlist, spotify_source=source.strip())
-    return result
+    return add_color(result, value)
 
 
 def schedule_music(hass, runtime, watch_id, panel, context):

@@ -11,3 +11,21 @@ config/
 *.key
 dist/
 artifacts/
+
+# Local credentials, signing material and diagnostic exports.
+*.env
+credentials*
+secrets*
+*.p12
+*.pfx
+*.pkcs12
+*.jks
+*.keystore
+*.log
+*.dump
+*.har
+configuration.yaml
+home-assistant_v2.db*
+.tools/
+.idea/
+.vscode/

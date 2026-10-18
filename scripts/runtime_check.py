@@ -71,6 +71,28 @@ async def main():
             assert configuration(manager.watches[watch_id])["entity"] == "panel.work_morning"
             await hass.services.async_call("fan_control", "set_active_panel", {"watch_id": watch_id, "panel_id": "devices"}, blocking=True)
             assert configuration(manager.watches[watch_id])["entity"] == "fan.example"
+            # Exercise the new Driving menu and selectors with synthetic entities only.
+            for entity, state, attributes in (
+                ("cover.example_garage", "closed", {"supported_features": 3}),
+                ("cover.example_trunk", "closed", {"supported_features": 3}),
+                ("button.example_wake", "unknown", {}),
+                ("binary_sensor.example_online", "off", {})):
+                hass.states.async_set(entity, state, attributes)
+            flow = await hass.config_entries.options.async_init(entry.entry_id)
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "panels"})
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"watch_id": watch_id})
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_driving"})
+            assert flow["step_id"] == "driving", flow
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {
+                "id": "driving", "name": "Driving", "garage_entity": "cover.example_garage",
+                "trunk_entity": "cover.example_trunk", "climate_entity": "climate.example_car",
+                "wake_entity": "button.example_wake", "awake_entity": "binary_sensor.example_online"})
+            assert flow["type"] == "create_entry", flow
+            await hass.services.async_call("fan_control", "set_active_panel", {"watch_id": watch_id, "panel_id": "driving"}, blocking=True)
+            assert configuration(manager.watches[watch_id])["entity"] == "panel.driving"
+            from custom_components.fan_control.panels import panel_state
+            driving = next(panel for panel in manager.watches[watch_id]["panels"] if panel["id"] == "driving")
+            assert panel_state(hass, driving)["trunk_state"] == "unknown"
             assert await hass.config_entries.async_unload(entry.entry_id)
             print("Real Home Assistant load, pairing/options flow, selector, actions, and unload passed.")
         finally:

@@ -1,10 +1,14 @@
 """Typed, user-configured panels. Entity permissions remain server-side."""
 import math
 import re
+from .panel_color import add_color
 from .exercise import validate_exercise, exercise_state
+from .driving import validate_driving, driving_state, driving_command
 
 
 def validate_panel(value):
+    if isinstance(value, dict) and value.get("type") == "driving":
+        return validate_driving(value)
     if isinstance(value, dict) and value.get("type") == "exercise":
         return validate_exercise(value)
     if not isinstance(value, dict) or value.get("type", "work_morning") != "work_morning":
@@ -29,7 +33,7 @@ def validate_panel(value):
             if not isinstance(entity, str) or len(entity) > 160 or not re.fullmatch(domain + r"\.[a-z0-9_]+", entity):
                 raise ValueError("Configure both vehicle wake and online entities")
         result.update(wake_entity=wake, awake_entity=awake)
-    return result
+    return add_color(result, value)
 
 
 def find_panel(watch, panel_id):
@@ -49,6 +53,8 @@ def configuration(watch):
 
 
 def panel_state(hass, panel):
+    if panel.get("type") == "driving":
+        return driving_state(hass, panel)
     if panel.get("type") == "exercise":
         return exercise_state(hass, panel)
     battery = hass.states.get(panel["battery_entity"])
@@ -90,6 +96,8 @@ def panel_command(hass, panel, action):
         if button is not None and button.state != "unavailable":
             return "button", "press", {"entity_id": panel["wake_entity"]}
         raise ValueError("Wake unavailable")
+    if panel.get("type") == "driving":
+        return driving_command(hass, panel, action)
     state = panel_state(hass, panel)
     if action in ("climate_on", "climate_off") and state["climate_available"]:
         entity = panel["climate_entity"]
