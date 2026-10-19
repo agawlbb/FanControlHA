@@ -304,11 +304,48 @@ def cancel_stop(operations, key, now_ms=None, identity=None):
     operations[key] = {"id":None, "issued":now, "cancelled_at":now, "blocked":blocked}
 
 
+async def select_driving_after_stop(hass, runtime, panel, key, operation, result):
+    """Select only this watch's uniquely matching car after confirmed Stop.
+
+    Caller holds runtime's lock. Location exclusions intentionally do not apply.
+    This changes configuration only; it never sends vehicle commands or wakes.
+    """
+    if result.get("operation_status") != "complete" or not operation or operation.get("driving_selected"):
+        return
+    if runtime.get("exercise_operations", {}).get(key) is not operation:
+        return
+    watch = runtime["manager"].watches.get(key[0])
+    if watch is None or next((p for p in watch.get("panels", []) if p.get("id") == key[1]), None) != panel:
+        return
+    roles = ("climate_entity", "wake_entity", "awake_entity")
+    matches = [p for p in watch.get("panels", []) if p.get("type") == "driving"
+               and all(panel.get(role) and p.get(role) == panel[role] for role in roles)]
+    if len(matches) != 1:
+        return  # Missing/ambiguous car mapping must never select another vehicle.
+    selected = matches[0]["id"]
+    if watch.get("active_panel") != selected:
+        previous, revision = watch.get("active_panel", ""), watch["revision"]
+        watch["active_panel"], watch["revision"] = selected, revision + 1
+        try:
+            await runtime["store"].async_save({"watches": runtime["manager"].watches,
+                                               "nonces": runtime["manager"].nonces})
+        except Exception:
+            watch["active_panel"], watch["revision"] = previous, revision
+            import logging
+            logging.getLogger(__name__).warning("Stop confirmed but Driving panel selection could not be saved")
+            return
+        from homeassistant.helpers.dispatcher import async_dispatcher_send
+        from .const import DOMAIN
+        async_dispatcher_send(hass, f"{DOMAIN}_updated")
+    operation["driving_selected"] = selected
+
+
 async def accept_stop(hass, runtime, panel, context, key, body):
     import asyncio
     operations = runtime.setdefault("exercise_operations", {})
     result = await retry_stop(hass, panel, context, operations, key, body)
     operation = operations.get(key)
+    await select_driving_after_stop(hass, runtime, panel, key, operation, result)
     if result["operation_status"] != "pending" or operation is None or operation.get("task") is not None:
         return result
     expected_owner = runtime["manager"].watches[key[0]]["owner_id"]
@@ -326,6 +363,7 @@ async def accept_stop(hass, runtime, panel, context, key, body):
                     if owner is None or not owner.is_active or not owner.is_admin:
                         cancel_stop(operations,key); return
                     update = await retry_stop(hass,panel,context,operations,key,body)
+                    await select_driving_after_stop(hass, runtime, panel, key, operation, update)
                     if update["operation_status"] != "pending":
                         return
         finally:

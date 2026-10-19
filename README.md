@@ -155,3 +155,14 @@ Only a currently displayed, settled vehicle page sends its wake request on
 entry. Hidden pages, page prefetch, refreshes, configuration/background reads,
 command delivery and screen-off retries never send wake. A previously dispatched
 wake cannot be recalled if the user leaves before its network response arrives.
+
+
+Confirmed Stop Exercise selects Driving (HA 0.4.2): after the authenticated
+Stop operation confirms unlock, climate on and target temperature, HA selects
+this watch's unique Driving panel matching climate, wake and online roles.
+This works on the immediate response or background continuation and does not
+depend on location. Pending, failed, expired, cancelled, stale and ambiguous
+operations must not select another car. Duplicate completed polls must not
+reapply selection over a later manual choice. Selection sends no vehicle wake
+or other physical command. All watch surfaces share the HA completion path.
+Deployment validation: 163 integration tests and Python compilation passed.
