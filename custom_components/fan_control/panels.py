@@ -7,6 +7,20 @@ from .driving import validate_driving, driving_state, driving_command
 
 
 def validate_panel(value):
+    if isinstance(value, dict) and value.get("type") == "fan":
+        result = {"type": "fan"}
+        for key, default in (("id", "fan"), ("name", "Fan Control")):
+            text = value.get(key, default)
+            if not isinstance(text, str) or not text.strip() or len(text.strip()) > 40:
+                raise ValueError("Invalid fan panel label")
+            result[key] = text.strip()
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", result["id"]) or result["id"] == "devices":
+            raise ValueError("Invalid panel ID")
+        entity = value.get("fan_entity")
+        if not isinstance(entity, str) or len(entity) > 160 or not re.fullmatch(r"fan\.[a-z0-9_]+", entity):
+            raise ValueError("Select a fan")
+        result["fan_entity"] = entity
+        return result
     if isinstance(value, dict) and value.get("type") == "driving":
         return validate_driving(value)
     if isinstance(value, dict) and value.get("type") == "exercise":
@@ -53,6 +67,9 @@ def configuration(watch):
 
 
 def panel_state(hass, panel):
+    if panel.get("type") == "fan":
+        state = hass.states.get(panel["fan_entity"])
+        return {"state": state.state if state else "unavailable", "attributes": {key: state.attributes[key] for key in ("percentage", "supported_features") if key in state.attributes} if state else {}}
     if panel.get("type") == "driving":
         return driving_state(hass, panel)
     if panel.get("type") == "exercise":
@@ -90,6 +107,11 @@ def panel_state(hass, panel):
 
 
 def panel_command(hass, panel, action):
+    if panel.get("type") == "fan":
+        from . import command
+        if panel_state(hass, panel)["state"] not in ("on", "off"):
+            raise ValueError("Fan unavailable")
+        return command(panel["fan_entity"], action)
     if action == "wake" and panel.get("wake_entity"):
         button = hass.states.get(panel["wake_entity"])
         # Buttons normally have unknown state until first pressed.

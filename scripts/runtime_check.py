@@ -93,6 +93,29 @@ async def main():
             from custom_components.fan_control.panels import panel_state
             driving = next(panel for panel in manager.watches[watch_id]["panels"] if panel["id"] == "driving")
             assert panel_state(hass, driving)["trunk_state"] == "unknown"
+            # Apple Watch starts with identity/address setup only, then adds a fan
+            # through the same panel manager as the vehicle panels.
+            pairing = manager.create(encode(keys.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)), "watch_os")
+            flow = await hass.config_entries.options.async_init(entry.entry_id)
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id":"pair"})
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"code":pairing["code"]})
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"matches":True})
+            assert not {"entities", "active_entity"} & {str(k) for k in flow["data_schema"].schema}
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"name":"Joes Ultra 4", "owner_id":owner.id, "local_url":"http://127.0.0.1:8123"})
+            assert flow["type"] == "create_entry", flow
+            apple_id = next(key for key, watch in manager.watches.items() if watch.get("platform") == "watch_os")
+            assert not configuration(manager.watches[apple_id])["devices"]
+            flow = await hass.config_entries.options.async_init(entry.entry_id)
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id":"panels"})
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"watch_id":apple_id})
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id":"add_fan"})
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"id":"bedroom", "name":"Bedroom", "fan_entity":"fan.example"})
+            assert flow["type"] == "create_entry", flow
+            await hass.async_block_till_done()
+            assert configuration(manager.watches[apple_id])["entity"] == "panel.bedroom"
+            from homeassistant.helpers import device_registry as dr
+            device = dr.async_get(hass).async_get_device(identifiers={("fan_control", apple_id)})
+            assert device.name == "Joes Ultra 4" and device.model == "Apple Watch", device
             assert await hass.config_entries.async_unload(entry.entry_id)
             print("Real Home Assistant load, pairing/options flow, selector, actions, and unload passed.")
         finally:

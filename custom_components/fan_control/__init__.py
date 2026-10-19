@@ -171,7 +171,7 @@ class PairView(HomeAssistantView):
                 queue.append(now)
                 manager = runtime["manager"]
                 if self.action == "create":
-                    result = manager.create(body["public_key"])
+                    result = manager.create(body["public_key"], body.get("platform", "wear_os"))
                 else:
                     token = request.headers.get("X-Fan-Control-Pairing", "")
                     if len(token) != 64:
@@ -205,6 +205,12 @@ class WatchView(HomeAssistantView):
                     raise ValueError("Pairing owner unavailable")
                 action = body.get("action")
                 if action == "config":
+                    # Authenticated client identification also repairs watches paired
+                    # before Apple Watch platform metadata was supported.
+                    if body.get("platform") == "watch_os" and watch.get("platform") != "watch_os":
+                        watch["platform"] = "watch_os"
+                        await save(runtime)
+                        async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
                     result = configuration(watch)
                 elif action in ("panel_state", "panel_command"):
                     panel = find_panel(watch, body.get("panel_id"))

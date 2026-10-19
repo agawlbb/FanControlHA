@@ -18,17 +18,19 @@ class Manager:
         self.sessions = {code: session for code, session in self.sessions.items() if session["expires_at"] > now}
         self.nonces = {key: expiry for key, expiry in self.nonces.items() if expiry > now}
 
-    def create(self, encoded_key):
+    def create(self, encoded_key, platform="wear_os"):
         self.prune()
         if len(self.sessions) >= 32:
             raise ValueError("Too many pending watches")
+        if platform not in ("wear_os", "watch_os"):
+            raise ValueError("Unsupported watch platform")
         key, fingerprint = public_key(encoded_key)
         code = f"{secrets.randbelow(100000000):08d}"
         while code in self.sessions:
             code = f"{secrets.randbelow(100000000):08d}"
         token = secrets.token_hex(32)
         expires_at = int(self.clock()) + PAIR_TTL
-        self.sessions[code] = {"key": key, "fingerprint": fingerprint, "token_hash": digest(token), "expires_at": expires_at}
+        self.sessions[code] = {"key": key, "fingerprint": fingerprint, "token_hash": digest(token), "expires_at": expires_at, "platform": platform}
         return {"code": code, "device_token": token, "fingerprint": fingerprint, "expires_at": expires_at}
 
     def lookup(self, code):

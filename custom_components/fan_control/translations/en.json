@@ -44,7 +44,7 @@
       },
       "devices": {
         "title": "Choose watch controls",
-        "description": "Choose up to 16 devices in the desired swipe order and an active tile device from that list. Remote access requires a working HTTPS address. Local HTTP uses encrypted application messages. Changes appear when the watch next opens its controls or refreshes the tile.",
+        "description": "Enter the watch name, administrator and Home Assistant addresses. Apple Watch panels are added separately under Manage watch panels; no fan is required. For Wear OS, choose approved devices and an active device. Remote access requires HTTPS.",
         "data": {
           "name": "Watch name",
           "entities": "Approved devices",
@@ -75,7 +75,8 @@
           "remove_panel": "Remove a panel",
           "activate_panel": "Select active panel",
           "add_exercise": "Add Exercise panel",
-          "add_driving": "Add Driving panel"
+          "add_driving": "Add Driving panel",
+          "add_fan": "Add Fan Control panel"
         }
       },
       "edit_panel": {
@@ -110,13 +111,12 @@
           "climate_label": "Climate button label",
           "script_label": "Script button label",
           "wake_entity": "Vehicle wake button (optional)",
-          "awake_entity": "Vehicle online binary sensor (optional)",
-          "color": "Car identification color"
+          "awake_entity": "Vehicle online binary sensor (optional)"
         }
       },
       "exercise": {
         "title": "Exercise panel",
-        "description": "Select all vehicle entities for the same car. Start locks the car and opens Spotify on the watch. Optional Spotify settings request the playlist with shuffle off through HA. A blank source uses Spotify's active device, which may be another device; opening the watch app does not guarantee transfer. Stop unlocks, turns climate on, sets 63Â°F, and requests watch-local Spotify pause.",
+        "description": "Select the vehicle entities for the same car. Start locks the car and requests Spotify launch. Spotify is optional: leave both player and playlist blank to skip it. Selecting a Spotify player REQUIRES a playlist link or URI. A blank source uses Spotify’s active device, possibly another device; opening the watch app does not guarantee transfer. Stop unlocks, turns climate on and sets 63°F. Apple Watch does not currently support watch-local Spotify pause.",
         "data": {
           "id": "Panel ID",
           "name": "Panel name",
@@ -125,9 +125,11 @@
           "wake_entity": "Car wake button",
           "awake_entity": "Car online binary sensor",
           "spotify_entity": "Spotify media player (optional)",
-          "spotify_playlist": "Spotify playlist link or URI (optional)",
-          "spotify_source": "Spotify source name (optional; blank uses active device)",
-          "color": "Car identification color"
+          "spotify_playlist": "Spotify playlist link or URI (required when a player is selected)",
+          "spotify_source": "Spotify source name (optional; blank uses active device)"
+        },
+        "data_description": {
+          "spotify_playlist": "Required with Spotify media player. Use an open.spotify.com/playlist/… link or spotify:playlist:… URI. Leave both fields blank to disable Spotify."
         }
       },
       "driving": {
@@ -143,12 +145,26 @@
           "awake_entity": "Vehicle online binary sensor",
           "color": "Car identification color"
         }
+      },
+      "fan": {
+        "title": "Fan Control panel",
+        "description": "Choose a fan. This panel is optional, like Exercise, Driving and Work Morning. Panel IDs must be unique for this watch and remain unchanged when editing.",
+        "data": {
+          "id": "Panel ID",
+          "name": "Panel name",
+          "fan_entity": "Fan"
+        }
       }
     },
     "error": {
       "invalid_pairing": "Pairing expired or was already approved. Start pairing again on the watch.",
       "invalid_configuration": "Check the addresses and device selection. The active device must be in your approved list. Pairing codes expire after 10 minutes.",
-      "invalid_panel": "Check entity types, percentage units, label lengths and unique panel ID. Keep an edited panel ID unchanged."
+      "invalid_panel": "Check entity types, percentage units, label lengths and unique panel ID. Keep an edited panel ID unchanged.",
+      "spotify_playlist_required": "Enter a playlist for the selected Spotify player, or clear the player to disable Spotify.",
+      "spotify_player_required": "Select a Spotify player for this playlist, or clear the playlist to disable Spotify.",
+      "invalid_spotify_playlist": "Enter a valid Spotify playlist link or spotify:playlist:… URI.",
+      "invalid_exercise": "Check the four vehicle entities, panel name (up to 40 characters), and unique panel ID. Keep an edited panel ID unchanged.",
+      "invalid_fan": "Select an existing fan and a unique panel ID. Keep an edited panel ID unchanged."
     },
     "abort": {
       "admin_required": "A Home Assistant administrator must manage watch access.",

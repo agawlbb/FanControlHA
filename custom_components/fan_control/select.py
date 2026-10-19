@@ -25,6 +25,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
             async_add_entities(added)
         for watch_id, entity in known.items():
             if entity.hass is not None and entity.entity_id is not None:
+                from homeassistant.helpers import device_registry as dr
+                registry = dr.async_get(hass)
+                device = registry.async_get_device(identifiers={(DOMAIN, entity.watch_id)})
+                if device and entity.watch:
+                    registry.async_update_device(device.id, name=entity.watch["name"], model=entity.device_info["model"])
                 entity.async_write_ha_state()
 
     entry.async_on_unload(async_dispatcher_connect(hass, f"{DOMAIN}_updated", update))
@@ -41,7 +46,11 @@ class WatchSelection(SelectEntity):
         self._runtime_hass, self.watch_id = hass, watch_id
         self._attr_unique_id = watch_id
         watch = self.watch
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, watch_id)}, name=watch["name"], manufacturer="Fan Control", model="Wear OS watch")
+
+    @property
+    def device_info(self):
+        watch = self.watch or {}
+        return DeviceInfo(identifiers={(DOMAIN, self.watch_id)}, name=watch.get("name", "Watch"), manufacturer="Fan Control", model="Apple Watch" if watch.get("platform") == "watch_os" else "Wear OS watch")
 
     @property
     def watch(self):
@@ -80,7 +89,7 @@ class PanelSelection(WatchSelection):
 
     @property
     def options(self):
-        return ["devices"] + [panel["id"] for panel in self.watch.get("panels", [])] if self.watch else []
+        return (["devices"] if self.watch.get("devices") else []) + [panel["id"] for panel in self.watch.get("panels", [])] if self.watch else []
 
     @property
     def current_option(self):
