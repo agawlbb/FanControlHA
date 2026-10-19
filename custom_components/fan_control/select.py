@@ -27,7 +27,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             if entity.hass is not None and entity.entity_id is not None:
                 from homeassistant.helpers import device_registry as dr
                 registry = dr.async_get(hass)
-                device = registry.async_get_device(identifiers={(DOMAIN, entity.watch_id)})
+                device = registry.async_get_device_by_identifier((DOMAIN, entity.watch_id), entry.entry_id)
                 if device and entity.watch:
                     registry.async_update_device(device.id, name=entity.watch["name"], model=entity.device_info["model"])
                 entity.async_write_ha_state()

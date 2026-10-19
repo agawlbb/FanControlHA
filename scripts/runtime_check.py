@@ -120,7 +120,7 @@ async def main():
             await hass.async_block_till_done()
             assert configuration(manager.watches[apple_id])["entity"] == "panel.bedroom"
             from homeassistant.helpers import device_registry as dr
-            device = dr.async_get(hass).async_get_device(identifiers={("fan_control", apple_id)})
+            device = dr.async_get(hass).async_get_device_by_identifier(("fan_control", apple_id), entry.entry_id)
             assert device.name == "Joes Ultra 4" and device.model == "Apple Watch", device
             assert await hass.config_entries.async_unload(entry.entry_id)
             print("Real Home Assistant load, pairing/options flow, selector, actions, and unload passed.")
