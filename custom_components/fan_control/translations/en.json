@@ -116,7 +116,7 @@
       },
       "exercise": {
         "title": "Exercise panel",
-        "description": "Select the vehicle entities for the same car. Start locks the car and requests Spotify launch. Spotify is optional: leave both player and playlist blank to skip it. Selecting a Spotify player REQUIRES a playlist link or URI. A blank source uses Spotify’s active device, possibly another device; opening the watch app does not guarantee transfer. Stop unlocks, turns climate on and sets 63°F. Apple Watch does not currently support watch-local Spotify pause.",
+        "description": "Select the vehicle entities for the same car. Start locks the car and requests Spotify launch. Spotify is optional: leave both player and playlist blank to skip it. Selecting a Spotify player REQUIRES a playlist link or URI. A blank source uses Spotify\u2019s active device, possibly another device; opening the watch app does not guarantee transfer. Stop unlocks, turns climate on and sets 63\u00b0F. Apple Watch does not currently support watch-local Spotify pause.",
         "data": {
           "id": "Panel ID",
           "name": "Panel name",
@@ -129,7 +129,7 @@
           "spotify_source": "Spotify source name (optional; blank uses active device)"
         },
         "data_description": {
-          "spotify_playlist": "Required with Spotify media player. Use an open.spotify.com/playlist/… link or spotify:playlist:… URI. Leave both fields blank to disable Spotify."
+          "spotify_playlist": "Required with Spotify media player. Use an open.spotify.com/playlist/\u2026 link or spotify:playlist:\u2026 URI. Leave both fields blank to disable Spotify."
         }
       },
       "driving": {
@@ -162,7 +162,7 @@
       "invalid_panel": "Check entity types, percentage units, label lengths and unique panel ID. Keep an edited panel ID unchanged.",
       "spotify_playlist_required": "Enter a playlist for the selected Spotify player, or clear the player to disable Spotify.",
       "spotify_player_required": "Select a Spotify player for this playlist, or clear the playlist to disable Spotify.",
-      "invalid_spotify_playlist": "Enter a valid Spotify playlist link or spotify:playlist:… URI.",
+      "invalid_spotify_playlist": "Enter a valid Spotify playlist link or spotify:playlist:\u2026 URI.",
       "invalid_exercise": "Check the four vehicle entities, panel name (up to 40 characters), and unique panel ID. Keep an edited panel ID unchanged.",
       "invalid_fan": "Select an existing fan and a unique panel ID. Keep an edited panel ID unchanged."
     },

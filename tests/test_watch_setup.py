@@ -7,6 +7,12 @@ from .test_api import runtime
 from .test_protocol import session
 from .test_panel_color import EXERCISE
 from cryptography.hazmat.primitives.asymmetric import rsa
+from pathlib import Path
+import json
+
+def test_translations_are_utf8_and_match():
+    root = Path(__file__).resolve().parents[1] / "custom_components/fan_control"
+    assert json.loads((root/"strings.json").read_text(encoding="utf-8")) == json.loads((root/"translations/en.json").read_text(encoding="utf-8"))
 
 def flow_setup():
     hass, manager, watch_id, _ = runtime()
