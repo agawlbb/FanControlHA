@@ -166,3 +166,11 @@ operations must not select another car. Duplicate completed polls must not
 reapply selection over a later manual choice. Selection sends no vehicle wake
 or other physical command. All watch surfaces share the HA completion path.
 Deployment validation: 163 integration tests and Python compilation passed.
+
+## Apple Watch setup (0.5.0)
+
+Apple Watch pairing accepts the watch name, owner and HA addresses without requiring a fan. Add Fan Control as an optional panel in Manage watch panels, alongside Exercise, Driving and Work Morning. The first panel on a watch without devices becomes active. Existing Android and Apple Watch device approvals remain supported.
+
+Exercise explicitly requires a playlist when its optional Spotify player is selected. Leave both blank to skip Spotify. Invalid submissions retain their field values, including the watch name. Only Driving has a car identification color picker. Device registry names update from the saved watch configuration, and authenticated watchOS identification repairs legacy Apple Watch records on first connection from watch app 0.2.0.
+
+Validation: 169 integration tests, Python compilation, and isolated Home Assistant 2026.10.1 startup, pairing, panel, selection and device metadata checks passed. These tests send no physical device commands.
