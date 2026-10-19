@@ -21,6 +21,11 @@ def validate_driving(value):
         result[role] = entity
     if result["garage_entity"] == result["trunk_entity"]:
         raise ValueError("Garage and trunk must be distinct")
+    horn = value.get("horn_entity")
+    if horn:
+        if not isinstance(horn, str) or len(horn) > 160 or not re.fullmatch(r"button\.[a-z0-9_]+", horn) or horn == result["wake_entity"]:
+            raise ValueError("Invalid horn role")
+        result["horn_entity"] = horn
     return add_color(result, value)
 
 
@@ -40,6 +45,10 @@ def driving_state(hass, panel):
     valid = awake and climate is not None and climate.state in ("off", "heat", "cool", "heat_cool", "auto", "dry", "fan_only")
     result["climate_on"] = valid and climate.state != "off"
     result["climate_available"] = valid and bool(climate.attributes.get("supported_features", 0) & 256)
+    result["climate_off_available"] = valid and bool(climate.attributes.get("supported_features", 0) & 128)
+    horn = hass.states.get(panel.get("horn_entity", ""))
+    # Button state is the last press timestamp (or unknown before its first press).
+    result["honk_available"] = awake and horn is not None and horn.state != "unavailable"
     return result
 
 
@@ -51,4 +60,8 @@ def driving_command(hass, panel, action):
                 return "cover", direction + "_cover", {"entity_id": panel[role + "_entity"]}
     if action == "climate_on" and state["climate_available"]:
         return "climate", "turn_on", {"entity_id": panel["climate_entity"]}
+    if action == "climate_off" and state["climate_off_available"]:
+        return "climate", "turn_off", {"entity_id": panel["climate_entity"]}
+    if action == "honk" and state["honk_available"]:
+        return "button", "press", {"entity_id": panel["horn_entity"]}
     raise ValueError("Driving action unavailable")

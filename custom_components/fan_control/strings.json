@@ -141,6 +141,7 @@
           "garage_entity": "Garage door cover",
           "trunk_entity": "Vehicle trunk cover",
           "climate_entity": "Vehicle climate",
+          "horn_entity": "Vehicle horn button (optional)",
           "wake_entity": "Vehicle wake button",
           "awake_entity": "Vehicle online binary sensor",
           "color": "Car identification color"

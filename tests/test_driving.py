@@ -32,13 +32,13 @@ def test_driving_roles_are_fixed_and_distinct(role, value):
 
 @pytest.mark.parametrize("action,entity,service", [("garage_open", "cover.example_garage", "open_cover"),
     ("garage_close", "cover.example_garage", "close_cover"), ("trunk_open", "cover.example_trunk", "open_cover"),
-    ("trunk_close", "cover.example_trunk", "close_cover"), ("climate_on", "climate.example_car", "turn_on")])
+    ("trunk_close", "cover.example_trunk", "close_cover"), ("climate_on", "climate.example_car", "turn_on"), ("climate_off", "climate.example_car", "turn_off")])
 def test_commands_are_explicit_and_bound_to_approved_roles(action, entity, service):
     hass, _, _, _ = setup_driving()
     assert panel_command(hass, PANEL, action) == (entity.split(".")[0], service, {"entity_id": entity})
 
 
-@pytest.mark.parametrize("action", ["toggle", "climate_off", "unlock", "leave", "stop_exercise", "open_cover"])
+@pytest.mark.parametrize("action", ["toggle", "unlock", "leave", "stop_exercise", "open_cover"])
 def test_unapproved_driving_commands_cannot_dispatch(action):
     hass, _, _, _ = setup_driving()
     with pytest.raises(ValueError): panel_command(hass, PANEL, action)
@@ -54,6 +54,26 @@ def test_sleeping_car_masks_trunk_and_climate_but_garage_still_works():
     for action in ("trunk_open", "trunk_close", "climate_on"):
         with pytest.raises(ValueError): panel_command(hass, PANEL, action)
     assert panel_command(hass, PANEL, "garage_open")[1] == "open_cover"
+
+
+def test_horn_requires_explicit_role_and_awake_vehicle():
+    hass, _, _, states = setup_driving()
+    with pytest.raises(ValueError): panel_command(hass, PANEL, "honk")
+    horn_panel = validate_panel({**PANEL, "horn_entity": "button.example_horn"})
+    states["button.example_horn"] = SimpleNamespace(state="unknown", attributes={})
+    assert panel_command(hass, horn_panel, "honk") == ("button", "press", {"entity_id": "button.example_horn"})
+    states["binary_sensor.example_online"].state = "off"
+    with pytest.raises(ValueError): panel_command(hass, horn_panel, "honk")
+    for role in ("button.example_wake", "script.horn", "button.invalid-name"):
+        with pytest.raises(ValueError): validate_panel({**PANEL, "horn_entity": role})
+
+
+def test_climate_off_requires_turn_off_capability_and_available_state():
+    hass, _, _, states = setup_driving()
+    states["climate.example_car"].attributes["supported_features"] = 256
+    with pytest.raises(ValueError): panel_command(hass, PANEL, "climate_off")
+    states["climate.example_car"].state = "unavailable"
+    with pytest.raises(ValueError): panel_command(hass, PANEL, "climate_on")
 
 
 def test_cover_unknown_is_not_reported_as_closed_and_capabilities_are_checked():
