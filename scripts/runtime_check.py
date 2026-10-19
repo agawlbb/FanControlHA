@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives import serialization
 from homeassistant.core import HomeAssistant
 from homeassistant.bootstrap import async_from_config_dict
 from homeassistant import loader
+from homeassistant.setup import async_setup_component
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.auth.const import GROUP_ID_ADMIN
 
@@ -21,7 +22,10 @@ async def main():
         try:
             # Bootstrap initializes auth, loaders, and the config-entry manager as on HA startup.
             loader.async_setup(hass)
-            await async_from_config_dict({"http": {"server_host": "127.0.0.1", "server_port": 18123}, "fan_control": {}}, hass)
+            config = {"http": {"server_host": "127.0.0.1", "server_port": 18123}, "fan_control": {}}
+            assert await async_from_config_dict(config, hass) is hass
+            assert await async_setup_component(hass, "fan_control", config)
+            await hass.async_block_till_done()
             assert "fan_control" in hass.config.components
             result = await hass.config_entries.flow.async_init("fan_control", context={"source": "user"}, data={})
             assert result["type"] == "create_entry", result
