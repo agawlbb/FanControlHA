@@ -174,3 +174,9 @@ Apple Watch pairing accepts the watch name, owner and HA addresses without requi
 Exercise explicitly requires a playlist when its optional Spotify player is selected. Leave both blank to skip Spotify. Invalid submissions retain their field values, including the watch name. Only Driving has a car identification color picker. Device registry names update from the saved watch configuration, and authenticated watchOS identification repairs legacy Apple Watch records on first connection from watch app 0.2.0.
 
 Validation: 169 integration tests, Python compilation, and isolated Home Assistant 2026.10.1 startup, pairing, panel, selection and device metadata checks passed. These tests send no physical device commands.
+
+## Apple Watch Driving controls (integration 0.5.1)
+
+Driving panels optionally approve a distinct horn button in the native panel manager. Apple Watch 0.3.0 displays garage, trunk, climate ON/OFF and horn in a 2×2 grid. Climate OFF checks the turn-off capability. Horn presses dispatch once and do not claim physical confirmation. Existing panels and Android controls remain supported; only approved panel roles can dispatch commands.
+
+Apple Watch can swipe through approved controls for the foreground session without changing HA selection. Reopening restores the HA-selected control. Only a displayed, settled vehicle entry may wake; swiping past a page before it settles cancels that entry work.
