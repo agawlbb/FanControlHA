@@ -59,7 +59,7 @@ class WatchSelection(SelectEntity):
 
     @property
     def available(self):
-        return self.watch is not None
+        return self.watch is not None and bool(self.options)
 
     @property
     def options(self):
@@ -67,7 +67,7 @@ class WatchSelection(SelectEntity):
 
     @property
     def current_option(self):
-        return self.watch["entity"] if self.watch else None
+        return self.watch["entity"] if self.watch and self.watch["entity"] in self.options else None
 
     async def async_select_option(self, option):
         runtime = self._runtime_hass.data[DOMAIN]
@@ -93,7 +93,8 @@ class PanelSelection(WatchSelection):
 
     @property
     def current_option(self):
-        return (self.watch.get("active_panel") or "devices") if self.watch else None
+        value = (self.watch.get("active_panel") or "devices") if self.watch else None
+        return value if value in self.options else None
 
     async def async_select_option(self, option):
         runtime = self._runtime_hass.data[DOMAIN]
