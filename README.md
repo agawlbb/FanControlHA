@@ -200,9 +200,29 @@ The paired Apple Watch downloads and verifies tracks using **Connection settings
 Sync exercise music**, then plays offline. No Spotify calls are made by this path.
 
 The Apple client sends `music_mode: local`. Stop still requests 63°F but confirms
-unlocked + climate on after temperature dispatch succeeds; temperature mismatch
+unlocked + climate on; temperature dispatch failure or mismatch
 does not block completion or Driving selection. At one minute, a passive HA state
 check produces a persistent notification on mismatch/unknown (Start: locked;
 Stop: unlocked + climate on). This is an HA notification, not a mobile push.
 Checks never wake vehicles and are scoped to the same watch, owner, panel and
 latest command. Legacy clients retain their existing confirmation behavior.
+
+## Apple Watch Exercise fixes — HA 0.6.1
+
+Local Stop delivers absolute unlock and climate-on intents without waiting for
+the online sensor or temperature capability metadata. Each required step is
+independent: an unlock failure does not suppress climate delivery. Available HA
+observations must confirm unlocked and climate on; offline cached states and
+service acknowledgments do not confirm success. The 63°F request remains best
+effort. Completion still selects the uniquely matching Driving panel once.
+
+The one-minute passive vehicle check is scheduled before dispatch, including
+failed delivery. Watch 0.5.0 (12) also schedules a local unconfirmed notification
+when an Exercise action starts, subject to notification permission. HA's own
+notification remains persistent in HA. No temperature check contributes to
+either deadline's confirmation.
+
+Validation: 187 integration tests passed; Python compilation passed. Required
+physical checks remain actual vehicle delivery, delayed state/Driving selection
+and the watch notification with its screen inactive. No physical commands were
+sent by automated validation.
