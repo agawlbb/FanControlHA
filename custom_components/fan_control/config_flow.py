@@ -362,6 +362,8 @@ class FanControlOptions(config_entries.OptionsFlow):
                 panel = validate_panel({**user_input, "type": "driving"})
                 if panel.get("horn_entity") and self.hass.states.get(panel["horn_entity"]) is None:
                     raise ValueError("Horn entity not found")
+                if panel.get("podcast_entity") and self.hass.states.get(panel["podcast_entity"]) is None:
+                    raise ValueError("Podcast script not found")
                 if self.editing_panel and panel["id"] != self.editing_panel:
                     raise ValueError("Keep panel ID")
                 if any(self.hass.states.get(panel[role]) is None for role, _ in roles):
@@ -392,4 +394,5 @@ class FanControlOptions(config_entries.OptionsFlow):
         for role, domain in roles:
             fields[vol.Required(role, **({"default": existing[role]} if role in existing else {}))] = selector.EntitySelector(selector.EntitySelectorConfig(domain=domain))
         fields[vol.Optional("horn_entity", **({"default": existing["horn_entity"]} if existing.get("horn_entity") else {}))] = selector.EntitySelector(selector.EntitySelectorConfig(domain="button"))
+        fields[vol.Optional("podcast_entity", **({"default": existing["podcast_entity"]} if existing.get("podcast_entity") else {}))] = selector.EntitySelector(selector.EntitySelectorConfig(domain="script"))
         return self.async_show_form(step_id="driving", errors=errors, data_schema=vol.Schema(fields))

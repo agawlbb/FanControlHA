@@ -10,6 +10,8 @@ Requires Home Assistant 2026.10 or newer and the integration-enabled Fan Control
 
 ## Configurable watch panels
 
+Pending source update: Apple Watch Driving panels support an optional **Podcast script** selector in the native panel editor. Select `script.baby_blue_podcast_play` to start the first unfinished episode from the selected queue on Spotify Joe's current device. The role is stored per panel as `podcast_entity`; only that approved script can be dispatched by the `podcast` command. Missing, running, unknown or unavailable scripts cannot dispatch. Podcast availability is independent of vehicle wake state. Existing Driving panels remain compatible without this optional role. Source only: not built, tested or deployed.
+
 In **Settings → Devices & services → Fan Control → Configure → Manage watch panels**, choose a watch and **Add Work Morning panel**. Select a battery percentage sensor, a climate power entity (or switch/input boolean), and a script using HA entity pickers. Panel names and button labels are editable; no personal entity IDs are compiled into the watch. Battery sensors must use `%`; climate entities must support HA power on/off. Missing sensor values show `?%`, unavailable climate controls are disabled, and running scripts cannot be started again from the panel.
 
 The Work Morning layout places battery percentage on the left and the climate toggle on the right of its top row, with a full-width script button in the bottom row. A script response confirms dispatch, not that the entire script completed. Existing fan controls and their speed mapping remain unchanged. The app shows only the HA-selected panel.
