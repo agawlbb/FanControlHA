@@ -8,7 +8,7 @@ Private configuration, Apple key, provider JWT cache and SQLite database belong 
 `/home/negaau5/fancontrol-private/`, outside all document roots. The private path
 is derived from this host's directory layout; adjust it for other hosts.
 
-The public GET response is a static discovery response. `configuration_required`
+The public GET response is a static discovery response. `available`
 does not reveal or probe the private credential state. POST fails closed until configured.
 No HA credentials, state, entity IDs, car names or vehicle commands are accepted.
 The relay only sends a silent refresh hint; the watch must fetch authenticated HA
@@ -60,6 +60,13 @@ Local validation passed: PHP syntax checks and four HTTP/security/signature test
 in `test_relay.py`, using temporary data and synthetic credentials only. The
 public endpoint was uploaded through cPanel and its configuration-required GET
 response was verified. No live APNs request was sent.
+
+October 20 deployment: the production APNs key and enabled configuration are
+installed in `/home/negaau5/fancontrol-private/` (directory 0700; key, config and
+SQLite database 0600). Signed requests succeeded; replay and bad-signature
+requests were rejected. The public GET is static and does not disclose private
+configuration readiness. The key is production-only and topic-restricted to the
+watch app. Real APNs delivery awaits a signed watch update and registration.
 
 Run PHP syntax checks on source and configuration template. Before enabling, test
 signed registration/refresh/unregister, bad signatures, replay, stale timestamps,

@@ -85,7 +85,9 @@ class RelayTests(unittest.TestCase):
 
     def test_get_is_static_and_post_fails_closed_without_config(self):
         with urllib.request.urlopen(self.url) as result:
-            self.assertEqual(json.load(result)["status"], "configuration_required")
+            value = json.load(result)
+            self.assertEqual(value["status"], "available")
+            self.assertEqual(value["authentication"], "required")
         held = self.config.with_suffix(".held")
         self.config.rename(held)
         try:

@@ -250,5 +250,12 @@ Validation for source `cd8426fe70198987f5aaf703fa3c9e55430d82f4`:
 [CI passed](https://github.com/agawlbb/FanControlHA/actions/runs/39500308307)
 199 tests (195 integration tests and four relay tests), Python compilation, PHP
 syntax checks and the isolated real Home Assistant 2026.10.1 runtime check. The
-relay is deployed but unconfigured. This version has not been deployed to live HA;
-APNs credentials, watch signing and real background delivery remain pending.
+relay is deployed and configured with a private production APNs key. Version
+0.6.2 was installed in live HA after verifying the previous source and saving a
+backup in `/config/.ha_mcp/fan-control-before-push-062` (File editor maps this
+configuration directory to `/homeassistant`). All changed files matched on
+readback, configuration validation passed and HA restarted with the integration
+loaded. The native push options confirm enabled and the matching installation;
+the system log has no Fan Control errors. No push or vehicle command was sent
+as a deployment test. A signed watch update and actual APNs delivery remain
+pending.

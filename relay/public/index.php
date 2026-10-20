@@ -37,7 +37,7 @@ function jwt(array $config): string {
 try {
     if (($_SERVER['HTTPS'] ?? '') !== 'on') { reply(403, ['error'=>'https_required']); }
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        reply(200, ['service'=>'FanControl push relay','protocol'=>1,'status'=>'configuration_required']);
+        reply(200, ['service'=>'FanControl push relay','protocol'=>1,'status'=>'available','authentication'=>'required']);
     }
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         header('Allow: GET, POST'); reply(405, ['error'=>'method_not_allowed']);
