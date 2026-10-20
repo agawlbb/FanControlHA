@@ -182,6 +182,8 @@ class PushCoordinator:
                 target = dict(target)
                 if self.registered.get(watch_id) != target:
                     status = await self.send({"action": "register", "watch_id": watch_id, **target})
+                    attempt["registration_result"] = status
+                    attempt["registration_responded_at_ms"] = int(time.time() * 1000)
                     if self.status(status) != 200:
                         attempt.update(status="registration_failed", registration_result=status)
                         await self.persist()
@@ -189,6 +191,7 @@ class PushCoordinator:
                         attempt = None
                         continue
                     self.registered[watch_id] = target
+                    await self.persist()
                 # Recheck revocation/token replacement after every network await.
                 if self.runtime["manager"].watches.get(watch_id) is not watch or watch.get("push_registration") != target:
                     attempt["status"] = "superseded"

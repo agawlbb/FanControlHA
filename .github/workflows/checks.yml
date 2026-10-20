@@ -18,6 +18,11 @@ jobs:
       - run: python -m pip install cryptography aiohttp probatio voluptuous pytest pytest-asyncio
       - run: python -m pytest -q
       - run: python -m compileall -q custom_components
+      - run: python scripts/build_integration.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FanControlHA-integration
+          path: dist/*.zip
       - run: php -l relay/public/index.php && php -l relay/config.example.php
   home-assistant-runtime:
     runs-on: ubuntu-latest
