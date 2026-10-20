@@ -248,6 +248,8 @@ async def retry_stop(hass, panel, context, operations, key, body, now_ms=None):
             return {"operation_status":"cancelled", "steps":[]}
         operation = {"id":identity, "issued":issued, "panel":dict(panel), "local_music":local_music, "done":set(), "next":0, "attempts":0, "blocked": previous.get("blocked", set()) if previous else set()}
         operations[key] = operation
+    if local_music:
+        return await deliver_local_stop(hass, panel, context, operation, now)
     if operation.get("complete"):
         return stop_result(operation)
     state = exercise_state(hass, panel, relaxed_temperature=local_music)
@@ -303,8 +305,57 @@ async def retry_stop(hass, panel, context, operations, key, body, now_ms=None):
 
 def stop_result(operation):
     return {"operation_status":"complete", "steps":[
-        {"step":s, "status":"requested" if operation.get("local_music") and s == "set_temperature" else "confirmed"}
+        {"step":s, "status":("requested" if operation.get("temperature_requested") else "unconfirmed")
+         if operation.get("local_music") and s == "set_temperature" else "confirmed"}
         for s in ("unlock", "turn_on", "set_temperature")]}
+
+
+async def deliver_local_stop(hass, panel, context, operation, now):
+    """Dispatch absolute intents even when the online sensor is stale/offline.
+
+    HA's vehicle integration owns service delivery. No explicit wake is sent.
+    Temperature is best-effort and cannot block unlock or climate confirmation.
+    """
+    if operation.get("complete"):
+        return stop_result(operation)
+    climate = hass.states.get(panel["climate_entity"])
+    lock = hass.states.get(panel["lock_entity"])
+    attrs = climate.attributes if climate else {}
+    observed = {"unlock": lock is not None and lock.state == "unlocked",
+                "turn_on": climate is not None and climate.state in ("heat", "cool", "heat_cool", "auto", "dry", "fan_only")}
+    allowed = now >= operation["next"]
+    results = []
+    if allowed:
+        operation["attempts"] += 1
+        operation["next"] = now + min(15000, 2000 * 2 ** min(operation["attempts"], 3))
+    for step, domain, entity in (("unlock", "lock", panel["lock_entity"]), ("turn_on", "climate", panel["climate_entity"])):
+        status = "confirmed" if observed[step] else "pending"
+        if not observed[step] and allowed:
+            try:
+                await hass.services.async_call(domain, step, {"entity_id": entity}, blocking=True, context=context)
+                status = "requested"
+            except Exception:
+                status = "unconfirmed"
+        results.append({"step": step, "status": status})
+    if allowed and not operation.get("temperature_requested"):
+        try:
+            unit = climate_unit(hass, attrs)
+            target = 63.0 if unit == "°F" else (63 - 32) * 5 / 9 if unit == "°C" else None
+            if target is None:
+                raise ValueError("Temperature unit unavailable")
+            await hass.services.async_call("climate", "set_temperature", {"entity_id": panel["climate_entity"], "temperature": target}, blocking=True, context=context)
+            operation["temperature_requested"] = True
+        except Exception:
+            pass  # Does not suppress either required operation or the deadline.
+    results.append({"step": "set_temperature", "status": "requested" if operation.get("temperature_requested") else "unconfirmed"})
+    # Re-read after delivery; neither successful service calls nor temperature
+    # acknowledgment are proof that the two required observed states match.
+    lock = hass.states.get(panel["lock_entity"])
+    climate = hass.states.get(panel["climate_entity"])
+    if lock is not None and lock.state == "unlocked" and climate is not None and climate.state in ("heat", "cool", "heat_cool", "auto", "dry", "fan_only"):
+        operation["complete"] = True
+        return stop_result(operation)
+    return {"operation_status": "pending", "steps": results}
 
 
 def cancel_stop(operations, key, now_ms=None, identity=None):

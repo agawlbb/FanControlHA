@@ -56,13 +56,36 @@ async def test_local_stop_requests_temperature_once_but_confirms_only_lock_and_c
 
 
 @pytest.mark.asyncio
-async def test_local_stop_partial_or_ambiguous_temperature_dispatch_never_completes():
+async def test_temperature_failure_does_not_block_confirmed_unlock_and_climate():
     hass, states = fixture(); operations = {}; now = STOP_SERVER_STARTED_MS + 10
     states["lock.example"].state = "unlocked"; states["climate.example"].state = "cool"
     hass.services.async_call.side_effect = RuntimeError("ambiguous")
     body = {**operation_body(now), "music_mode":"local"}
-    assert (await retry_stop(hass, PANEL, None, operations, "watch", body, now))["operation_status"] == "pending"
-    assert not operations["watch"].get("complete")
+    result = await retry_stop(hass, PANEL, None, operations, "watch", body, now)
+    assert result["operation_status"] == "complete"
+    assert result["steps"][-1]["status"] == "unconfirmed"
+
+
+@pytest.mark.asyncio
+async def test_local_stop_dispatches_required_steps_offline_without_temperature_metadata():
+    hass, states = fixture(); now = STOP_SERVER_STARTED_MS + 10
+    states["binary_sensor.example_online"].state = "off"
+    states["climate.example"].attributes.clear()
+    result = await retry_stop(hass, PANEL, None, {}, "watch", {**operation_body(now), "music_mode":"local"}, now)
+    assert result["operation_status"] == "pending"
+    assert [(c.args[0], c.args[1]) for c in hass.services.async_call.await_args_list] == [("lock", "unlock"), ("climate", "turn_on")]
+
+
+@pytest.mark.asyncio
+async def test_local_stop_unlock_failure_does_not_suppress_climate_or_confirm_success():
+    hass, states = fixture(); now = STOP_SERVER_STARTED_MS + 10
+    async def deliver(domain, service, *args, **kwargs):
+        if service == "unlock": raise RuntimeError("delivery failed")
+        if service == "turn_on": states["climate.example"].state = "cool"
+    hass.services.async_call.side_effect = deliver
+    result = await retry_stop(hass, PANEL, None, {}, "watch", {**operation_body(now), "music_mode":"local"}, now)
+    assert result["operation_status"] == "pending"
+    assert [c.args[1] for c in hass.services.async_call.await_args_list] == ["unlock", "turn_on", "set_temperature"]
 
 
 def test_vehicle_check_ignores_temperature_but_not_unknown_states():

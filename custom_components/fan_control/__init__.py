@@ -231,6 +231,11 @@ class WatchView(HomeAssistantView):
                                 raise ValueError("Exercise target changed")
                         operations = runtime.setdefault("exercise_operations", {})
                         operation_key = (packet["watch_id"], panel["id"])
+                        if local_music and body.get("command") in ("start_exercise", "stop_exercise"):
+                            from .exercise import schedule_vehicle_check
+                            # Receipt of a valid intent starts the deadline, even
+                            # when dispatch fails or capability checks reject it.
+                            schedule_vehicle_check(self.hass, runtime, packet["watch_id"], panel, body)
                         if body.get("command") == "start_music":
                             from .exercise import schedule_music
                             result = schedule_music(self.hass, runtime, packet["watch_id"], panel, Context(user_id=owner.id))
@@ -249,10 +254,6 @@ class WatchView(HomeAssistantView):
                             if body.get("command") == "start_exercise":
                                 cancel_stop(operations, operation_key)
                             result = await execute_exercise(self.hass, panel, body.get("command"), Context(user_id=owner.id), relaxed_temperature=local_music)
-                        if local_music and (body.get("command") == "start_exercise" or
-                                body.get("command") == "stop_exercise" and result.get("operation_status") in ("pending", "complete")):
-                            from .exercise import schedule_vehicle_check
-                            schedule_vehicle_check(self.hass, runtime, packet["watch_id"], panel, body)
                     else:
                         if action == "panel_command":
                             domain, service, data = panel_command(self.hass, panel, body.get("command"))
