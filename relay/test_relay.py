@@ -83,6 +83,21 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(self.post({"action":"wake","watch_id":"synthetic"})[0],400)
         self.assertEqual(self.post({**body,"huge":"x"*5000})[0],413)
 
+    def test_correlation_validation_and_apns_evidence_never_claim_delivery(self):
+        update = "12345678-1234-4234-a234-123456789abc"
+        body = {"action":"refresh", "watch_id":"unregistered", "reason":"selection", "update_id":update}
+        self.assertEqual(self.post(body)[0], 404) # Valid hint schema; no APNs dispatch.
+        self.assertEqual(self.post({**body,"update_id":"invalid\r\nheader"})[0], 400)
+        functions = (SOURCE / "public" / "index.php").read_text().split("\ntry {",1)[0]
+        script = self.home / "evidence-test.php"
+        script.write_text(functions + '\necho json_encode([json_decode(refresh_payload($argv[1], "synthetic"),true),apns_evidence($argv[1],200,""),apns_evidence($argv[1],400,\'{"reason":"BadDeviceToken"}\'),apns_evidence($argv[1],0,false)]);')
+        payload, accepted, rejected, ambiguous = json.loads(subprocess.check_output([PHP,str(script),update],text=True))
+        self.assertEqual(payload["fancontrol"], {"refresh":True,"update_id":update,"watch_id":"synthetic"})
+        for evidence in (accepted, rejected, ambiguous):
+            self.assertEqual(evidence["apns_id"], update)
+            self.assertFalse(evidence["watch_delivery_confirmed"])
+        self.assertEqual(rejected["apns_reason"], "BadDeviceToken")
+
     def test_get_is_static_and_post_fails_closed_without_config(self):
         with urllib.request.urlopen(self.url) as result:
             value = json.load(result)
