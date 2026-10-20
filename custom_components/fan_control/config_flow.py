@@ -35,7 +35,34 @@ class FanControlOptions(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         # HA protects native options endpoints with require_admin. Options context
         # does not carry the browser's user ID, so select an active admin owner explicitly.
-        return self.async_show_menu(step_id="init", menu_options=["pair", "configure", "panels", "revoke"])
+        return self.async_show_menu(step_id="init", menu_options=["pair", "configure", "panels", "push", "revoke"])
+
+    async def async_step_push(self, user_input=None):
+        import re
+        runtime = self.hass.data[DOMAIN]
+        current = runtime.get("push_settings", {})
+        errors = {}
+        if user_input is not None:
+            candidate = {"enabled": user_input.get("enabled", False),
+                         "installation": user_input.get("installation", "").strip(),
+                         "secret": user_input.get("secret") or current.get("secret", "")}
+            if candidate["enabled"] and (not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", candidate["installation"])
+                                         or not 32 <= len(candidate["secret"]) <= 256):
+                errors["base"] = "invalid_push"
+            else:
+                async with runtime["lock"]:
+                    push = runtime.get("push")
+                    if push:
+                        await push.reset_delivery()
+                    runtime["push_settings"] = candidate
+                    await save(runtime)
+                    async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
+                return self.async_create_entry(title="", data={})
+        return self.async_show_form(step_id="push", errors=errors, data_schema=vol.Schema({
+            vol.Required("enabled", default=current.get("enabled", False)): bool,
+            vol.Optional("installation", default=current.get("installation", "")): str,
+            vol.Optional("secret"): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
+        }))
 
     async def async_step_pair(self, user_input=None):
         errors = {}

@@ -30,9 +30,10 @@ class Flow:
 
 sys.modules["homeassistant.config_entries"].ConfigFlow = Flow
 sys.modules["homeassistant.config_entries"].OptionsFlow = Flow
-for name in ("SelectSelector", "EntitySelector"):
+for name in ("SelectSelector", "EntitySelector", "TextSelector"):
     setattr(sys.modules["homeassistant.helpers.selector"], name, lambda config: lambda value: value)
     setattr(sys.modules["homeassistant.helpers.selector"], name + "Config", lambda **kwargs: kwargs)
+sys.modules["homeassistant.helpers.selector"].TextSelectorType = types.SimpleNamespace(PASSWORD="password")
 sys.modules["homeassistant.helpers.selector"].ColorRGBSelector = lambda: lambda value: value
 sys.modules["homeassistant.helpers.network"].get_url = lambda *args, **kwargs: "https://ha.example.com" if kwargs.get("require_ssl") else "http://192.168.1.2:8123"
 sys.modules["homeassistant.helpers.network"].NoURLAvailableError = type("NoURLAvailableError", (Exception,), {})

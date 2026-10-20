@@ -34,8 +34,22 @@ async def async_setup_entry(hass, entry):
     store = Store(hass, 1, DOMAIN)
     saved = await store.async_load() or {}
     manager = Manager(saved.get("watches", {}), nonces=saved.get("nonces", {}))
-    runtime = {"manager": manager, "store": store, "lock": asyncio.Lock(), "attempts": {}, "entry": entry}
+    runtime = {"manager": manager, "store": store, "lock": asyncio.Lock(), "attempts": {}, "entry": entry,
+               "push_settings": saved.get("push_settings", {})}
     hass.data[DOMAIN] = runtime
+    from .push import PushCoordinator
+    from homeassistant.helpers.dispatcher import async_dispatcher_connect
+    from homeassistant.core import callback
+    push = runtime["push"] = PushCoordinator(hass, runtime)
+    @callback
+    def push_updated():
+        push.updated()
+    @callback
+    def push_state_changed(event):
+        push.state_changed(event)
+    entry.async_on_unload(async_dispatcher_connect(hass, f"{DOMAIN}_updated", push_updated))
+    entry.async_on_unload(hass.bus.async_listen("state_changed", push_state_changed))
+    push.updated()
 
     async def set_active(call):
         async with runtime["lock"]:
@@ -76,6 +90,8 @@ async def async_unload_entry(hass, entry):
     hass.services.async_remove(DOMAIN, "set_active_panel")
     runtime = hass.data.pop(DOMAIN, None)
     if runtime:
+        if runtime.get("push"):
+            await runtime["push"].close()
         tasks = [op.get("task") for op in runtime.get("exercise_operations", {}).values() if op.get("task") is not None]
         tasks.extend(runtime.get("music_tasks", {}).values())
         tasks.extend(runtime.get("exercise_checks", {}).values())
@@ -88,7 +104,8 @@ async def async_unload_entry(hass, entry):
 
 
 async def save(runtime):
-    await runtime["store"].async_save({"watches": runtime["manager"].watches, "nonces": runtime["manager"].nonces})
+    await runtime["store"].async_save({"watches": runtime["manager"].watches, "nonces": runtime["manager"].nonces,
+                                       "push_settings": runtime.get("push_settings", {})})
 
 
 async def async_remove_entry(hass, entry):
@@ -107,7 +124,8 @@ async def async_remove_config_entry_device(hass, entry, device_entry):
         watches = {key: value for key, value in manager.watches.items() if key != watch_id}
         nonces = {key: value for key, value in manager.nonces.items() if not key.startswith(watch_id + ":")}
         # Persist first: if saving fails, HA keeps the device and its current authorization.
-        await runtime["store"].async_save({"watches": watches, "nonces": nonces})
+        await runtime["store"].async_save({"watches": watches, "nonces": nonces,
+                                           "push_settings": runtime.get("push_settings", {})})
         manager.watches, manager.nonces = watches, nonces
         manager.sessions = {key: value for key, value in manager.sessions.items() if value.get("watch_id") != watch_id}
         async_dispatcher_send(hass, f"{DOMAIN}_updated")
@@ -213,6 +231,14 @@ class WatchView(HomeAssistantView):
                         await save(runtime)
                         async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
                     result = configuration(watch)
+                elif action == "push_register":
+                    if watch.get("platform") != "watch_os":
+                        raise ValueError("Apple Watch required")
+                    from .push import registration
+                    watch["push_registration"] = registration(body)
+                    await save(runtime)
+                    async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
+                    result = {"status": "registered_with_ha"}
                 elif action in ("exercise_music_list", "exercise_music_chunk"):
                     from .local_music import private_music
                     result = await private_music(self.hass, watch, body)

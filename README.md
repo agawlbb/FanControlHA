@@ -226,3 +226,20 @@ Validation: 187 integration tests passed; Python compilation passed. Required
 physical checks remain actual vehicle delivery, delayed state/Driving selection
 and the watch notification with its screen inactive. No physical commands were
 sent by automated validation.
+
+## Apple Watch passive push refresh (0.6.2)
+
+Configure **Apple Watch push refresh** in the native integration options to enable
+the relay at `https://coffeybean.com/FanControl/`. Configure its Apple APNs signing
+key and the same installation ID/shared secret on the host first. This is opt-in;
+watch tokens go to the hosted relay and Apple. HA credentials, entity IDs, car
+names and observations are never sent there. The secret stays in HA storage and
+the private host configuration, outside public document roots.
+
+Only Apple watches with an authenticated APNs registration participate. HA sends
+hints for selected-panel/configuration changes and meaningful changes in that
+watch's selected panel's observed fields. Inactive cars and unrelated attributes
+produce no hint. One-second bursts combine into a single request. APNs hints
+contain only a refresh flag. These paths never invoke vehicle wake or any other
+HA service. Watch swipe navigation does not alter HA's selected-panel subscription.
+Polling remains available if push is disabled, delayed or unavailable.
