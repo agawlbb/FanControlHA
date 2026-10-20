@@ -321,8 +321,10 @@ async def deliver_local_stop(hass, panel, context, operation, now):
     climate = hass.states.get(panel["climate_entity"])
     lock = hass.states.get(panel["lock_entity"])
     attrs = climate.attributes if climate else {}
-    observed = {"unlock": lock is not None and lock.state == "unlocked",
-                "turn_on": climate is not None and climate.state in ("heat", "cool", "heat_cool", "auto", "dry", "fan_only")}
+    online = hass.states.get(panel["awake_entity"])
+    fresh = online is not None and online.state == "on"
+    observed = {"unlock": fresh and lock is not None and lock.state == "unlocked",
+                "turn_on": fresh and climate is not None and climate.state in ("heat", "cool", "heat_cool", "auto", "dry", "fan_only")}
     allowed = now >= operation["next"]
     results = []
     if allowed:

@@ -96,6 +96,7 @@ async def test_offline_cached_matching_states_cannot_confirm_stop():
     states["climate.example"].state = "cool"
     result = await retry_stop(hass, PANEL, None, {}, "watch", {**operation_body(now), "music_mode":"local"}, now)
     assert result["operation_status"] == "pending"
+    assert [c.args[1] for c in hass.services.async_call.await_args_list] == ["unlock", "turn_on", "set_temperature"]
 
 
 @pytest.mark.asyncio
