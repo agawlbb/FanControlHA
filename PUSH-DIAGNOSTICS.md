@@ -1,5 +1,7 @@
 # Push reconciliation — HA 0.6.3 / watch 0.5.2 (14)
 
+Validation: [CI run 39514438444](https://github.com/agawlbb/FanControlHA/actions/runs/39514438444) passed on source `4321fd2e0b7bebc9255f2bc7a828d0cd7a5ca128`: 205 integration/relay tests, Python compilation, PHP syntax checks, integration ZIP packaging, patched package/version and image checks, and real HA 2026.10.2 startup/options/actions/unload. Production HA/relay were not deployed and physical push delivery remains to be checked. The workflow's previous disabled state was restored after this validation run.
+
 HA persists a unique update ID, watch, intended panel, configuration revision, reason and attempt timestamp before relay network work. Bounded results record registration failures, relay/APNs acceptance/rejection, transport ambiguity and cancellation. APNs acceptance is never labeled watch delivery. New hint payloads carry only a refresh flag and correlation/watch IDs; no selected panel, observation or credential is trusted from a push.
 
 The watch records receipt before starting refresh, then separate refresh-start, skip, fetch, save and failure events. Original event times survive delayed uploads; HA adds report times and deduplicates by event ID. Only the authenticated watch can report against its own attempts. Unknown/expired/other-watch update IDs are discarded without creating receipt evidence. First local selection on opening is recorded before foreground refresh. Uncorrelated opens and registration failures remain visible separately.
