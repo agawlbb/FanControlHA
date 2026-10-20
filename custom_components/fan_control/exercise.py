@@ -352,7 +352,8 @@ async def deliver_local_stop(hass, panel, context, operation, now):
     # acknowledgment are proof that the two required observed states match.
     lock = hass.states.get(panel["lock_entity"])
     climate = hass.states.get(panel["climate_entity"])
-    if lock is not None and lock.state == "unlocked" and climate is not None and climate.state in ("heat", "cool", "heat_cool", "auto", "dry", "fan_only"):
+    online = hass.states.get(panel["awake_entity"])
+    if online is not None and online.state == "on" and lock is not None and lock.state == "unlocked" and climate is not None and climate.state in ("heat", "cool", "heat_cool", "auto", "dry", "fan_only"):
         operation["complete"] = True
         return stop_result(operation)
     return {"operation_status": "pending", "steps": results}

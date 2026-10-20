@@ -88,6 +88,32 @@ async def test_local_stop_unlock_failure_does_not_suppress_climate_or_confirm_su
     assert [c.args[1] for c in hass.services.async_call.await_args_list] == ["unlock", "turn_on", "set_temperature"]
 
 
+@pytest.mark.asyncio
+async def test_offline_cached_matching_states_cannot_confirm_stop():
+    hass, states = fixture(); now = STOP_SERVER_STARTED_MS + 10
+    states["binary_sensor.example_online"].state = "off"
+    states["lock.example"].state = "unlocked"
+    states["climate.example"].state = "cool"
+    result = await retry_stop(hass, PANEL, None, {}, "watch", {**operation_body(now), "music_mode":"local"}, now)
+    assert result["operation_status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_failure_still_schedules_one_minute_vehicle_check(monkeypatch):
+    import custom_components.fan_control as integration
+    hass, manager, watch_id, _ = runtime(); _, states = fixture(); hass.states.get = states.get
+    manager.watches[watch_id].update(platform="watch_os", panels=[PANEL])
+    monkeypatch.setattr(integration, "execute_exercise", AsyncMock(side_effect=ValueError("unavailable")))
+    body = {**operation_body(int(time.time() * 1000)), "music_mode":"local", "command":"start_exercise",
+            "action":"panel_command", "panel_id":PANEL["id"], "panel_config":PANEL}
+    response = await integration.WatchView(hass).post(request(packet(watch_id, manager.watches[watch_id]["secret"], body)))
+    assert response.status == 403
+    task = hass.data["fan_control"]["exercise_checks"][(watch_id, PANEL["id"])]
+    assert not task.done()
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+
 def test_vehicle_check_ignores_temperature_but_not_unknown_states():
     hass, states = fixture()
     assert vehicle_mismatches(hass, PANEL, "start_exercise") == []
