@@ -159,7 +159,7 @@ def climate_unit(hass, attributes):
     return attributes.get("temperature_unit") or getattr(getattr(getattr(hass, "config", None), "units", None), "temperature_unit", None)
 
 
-def exercise_state(hass, panel):
+def exercise_state(hass, panel, *, relaxed_temperature=False):
     online = hass.states.get(panel["awake_entity"])
     lock = hass.states.get(panel["lock_entity"])
     climate = hass.states.get(panel["climate_entity"])
@@ -175,7 +175,7 @@ def exercise_state(hass, panel):
         attrs = climate.attributes
         target = target_temperature(climate_unit(hass, attrs), attrs.get("min_temp"), attrs.get("max_temp"))
         step = attrs.get("target_temp_step")
-        if step is not None and (isinstance(step, bool) or not isinstance(step, (int, float))
+        if not relaxed_temperature and step is not None and (isinstance(step, bool) or not isinstance(step, (int, float))
                 or not math.isfinite(step) or step <= 0 or not math.isclose(target / step, round(target / step), abs_tol=1e-6)):
             raise ValueError("Exact temperature unsupported")
     except (ValueError, TypeError):
@@ -184,9 +184,9 @@ def exercise_state(hass, panel):
             "locked": ready and lock.state == "locked", "spotify_pause": "watch_local"}
 
 
-async def execute_exercise(hass, panel, action, context):
+async def execute_exercise(hass, panel, action, context, *, relaxed_temperature=False):
     """No retries or rollback: accurately return requested/unknown/skipped steps."""
-    state = exercise_state(hass, panel)
+    state = exercise_state(hass, panel, relaxed_temperature=relaxed_temperature)
     if action not in ("start_exercise", "stop_exercise") or not state[
             "start_available" if action == "start_exercise" else "stop_available"]:
         raise ValueError("Exercise action unavailable")
@@ -236,20 +236,21 @@ async def retry_stop(hass, panel, context, operations, key, body, now_ms=None):
     if body.get("panel_config") not in (panel, vehicle_panel):
         raise ValueError("Exercise target changed")
     previous = operations.get(key)
+    local_music = body.get("music_mode") == "local"
     if previous and (identity in previous.get("blocked", set()) or issued <= previous.get("cancelled_at", -1) or issued < previous["issued"]):
         return {"operation_status":"cancelled", "steps":[]}
     if previous and previous.get("id") == identity:
         operation = previous
-        if operation["panel"] != panel or operation["issued"] != issued:
+        if operation["panel"] != panel or operation["issued"] != issued or operation.get("local_music", False) != local_music:
             raise ValueError("Exercise target changed")
     else:
         if previous and issued == previous["issued"]:
             return {"operation_status":"cancelled", "steps":[]}
-        operation = {"id":identity, "issued":issued, "panel":dict(panel), "done":set(), "next":0, "attempts":0, "blocked": previous.get("blocked", set()) if previous else set()}
+        operation = {"id":identity, "issued":issued, "panel":dict(panel), "local_music":local_music, "done":set(), "next":0, "attempts":0, "blocked": previous.get("blocked", set()) if previous else set()}
         operations[key] = operation
     if operation.get("complete"):
-        return {"operation_status":"complete", "steps":[{"step":s,"status":"confirmed"} for s in ("unlock","turn_on","set_temperature")]}
-    state = exercise_state(hass, panel)
+        return stop_result(operation)
+    state = exercise_state(hass, panel, relaxed_temperature=local_music)
     if not state["vehicle_ready"]:
         return {"operation_status":"pending", "steps":[], "message":"Waiting for vehicle"}
     if not state["stop_available"]:
@@ -259,13 +260,14 @@ async def retry_stop(hass, panel, context, operations, key, body, now_ms=None):
     target = target_temperature(climate_unit(hass, attrs), attrs.get("min_temp"), attrs.get("max_temp"))
     lock = hass.states.get(panel["lock_entity"])
     desired = {"unlock": lock.state == "unlocked", "turn_on": climate.state != "off",
-               "set_temperature": isinstance(attrs.get("temperature"), (int,float)) and not isinstance(attrs.get("temperature"), bool)
+               "set_temperature": operation.get("temperature_requested", False) if local_music else
+                    isinstance(attrs.get("temperature"), (int,float)) and not isinstance(attrs.get("temperature"), bool)
                     and math.isclose(attrs["temperature"], target, abs_tol=0.01)}
     operation["done"].update(step for step, satisfied in desired.items() if satisfied)
     names = ("unlock", "turn_on", "set_temperature")
-    if len(operation["done"]) == 3:
+    if all(desired.values()) if local_music else len(operation["done"]) == 3:
         operation["complete"] = True
-        return {"operation_status":"complete", "steps":[{"step":s,"status":"confirmed"} for s in names]}
+        return stop_result(operation)
     results = []
     allowed = now >= operation["next"]
     operation["attempts"] += int(allowed)
@@ -275,8 +277,12 @@ async def retry_stop(hass, panel, context, operations, key, body, now_ms=None):
                 "turn_on":("climate","turn_on",{"entity_id":panel["climate_entity"]}),
                 "set_temperature":("climate","set_temperature",{"entity_id":panel["climate_entity"],"temperature":target})}
     for step in names:
+        # Local playback Stop always rechecks currently observed lock/climate;
+        # an earlier observation must not hide a subsequent state reversal.
+        if local_music and not desired[step]:
+            operation["done"].discard(step)
         if step in operation["done"]:
-            results.append({"step":step,"status":"confirmed"}); continue
+            results.append({"step":step,"status":"requested" if local_music and step == "set_temperature" else "confirmed"}); continue
         if not allowed:
             results.append({"step":step,"status":"pending"}); continue
         try:
@@ -286,11 +292,19 @@ async def retry_stop(hass, panel, context, operations, key, body, now_ms=None):
             if online is None or online.state != "on": raise ValueError("Offline")
             domain, service, data = commands[step]
             await hass.services.async_call(domain, service, data, blocking=True, context=context)
+            if local_music and step == "set_temperature":
+                operation["temperature_requested"] = True
             results.append({"step":step,"status":"requested"})
         except Exception:
             results.append({"step":step,"status":"unconfirmed"})
             allowed = False
     return {"operation_status":"pending", "steps":results}
+
+
+def stop_result(operation):
+    return {"operation_status":"complete", "steps":[
+        {"step":s, "status":"requested" if operation.get("local_music") and s == "set_temperature" else "confirmed"}
+        for s in ("unlock", "turn_on", "set_temperature")]}
 
 
 def cancel_stop(operations, key, now_ms=None, identity=None):
@@ -370,3 +384,86 @@ async def accept_stop(hass, runtime, panel, context, key, body):
             operation["task"] = None
     operation["task"] = asyncio.create_task(continue_stop())
     return result
+
+
+def vehicle_mismatches(hass, panel, command):
+    """Passive HA observations; never wake or claim independent physical proof."""
+    online = hass.states.get(panel["awake_entity"])
+    if online is None or online.state != "on":
+        return ["Vehicle state unavailable (vehicle offline or unknown)"]
+    lock = hass.states.get(panel["lock_entity"])
+    desired = "locked" if command == "start_exercise" else "unlocked"
+    failures = []
+    if lock is None or lock.state in ("unknown", "unavailable"):
+        failures.append("Car lock state unavailable")
+    elif lock.state != desired:
+        failures.append("Car is not confirmed " + desired)
+    if command == "stop_exercise":
+        climate = hass.states.get(panel["climate_entity"])
+        if climate is None or climate.state not in ("heat", "cool", "heat_cool", "auto", "dry", "fan_only"):
+            failures.append("Car climate is not confirmed on")
+    return failures
+
+
+def schedule_vehicle_check(hass, runtime, watch_id, panel, body):
+    """One HA notification at one minute; survives the watch leaving its screen.
+
+    Repeated operation polls retain the original deadline. New commands supersede
+    old checks. Integration unload, revocation and target changes cancel delivery.
+    """
+    import asyncio
+    from .const import DOMAIN
+    key = (watch_id, panel["id"])
+    tasks = runtime.setdefault("exercise_checks", {})
+    identities = runtime.setdefault("exercise_check_ids", {})
+    identity = body.get("operation_id")
+    if not isinstance(identity, str) or not re.fullmatch(r"[a-f0-9-]{36}", identity):
+        raise ValueError("Invalid Exercise check identity")
+    if identities.get(key) == identity:
+        return
+    previous = tasks.pop(key, None)
+    if previous is not None:
+        previous.cancel()
+    identities[key] = identity
+    expected_panel = dict(panel)
+    owner_id = runtime["manager"].watches[watch_id]["owner_id"]
+    issued = body.get("issued_at_ms")
+    now = int(time.time() * 1000)
+    if type(issued) is not int or issued > now + 5000 or issued < now - 120000:
+        raise ValueError("Invalid Exercise check time")
+
+    async def check():
+        try:
+            await asyncio.sleep(max(0, (issued + 60000 - int(time.time() * 1000)) / 1000))
+            async with runtime["lock"]:
+                watch = runtime["manager"].watches.get(watch_id)
+                if (hass.data.get(DOMAIN) is not runtime or identities.get(key) != identity
+                        or watch is None or watch["owner_id"] != owner_id
+                        or next((p for p in watch.get("panels", []) if p.get("id") == panel["id"]), None) != expected_panel):
+                    return
+                owner = await hass.auth.async_get_user(owner_id)
+                if owner is None or not owner.is_active or not owner.is_admin:
+                    return
+                failures = vehicle_mismatches(hass, panel, body["command"])
+                if failures:
+                    await hass.services.async_call("persistent_notification", "create", {
+                        "title": "Exercise vehicle check",
+                        "message": "One minute after " + ("Start" if body["command"] == "start_exercise" else "Stop")
+                            + " Exercise: " + "; ".join(failures) + ". Based on Home Assistant observations.",
+                        "notification_id": "fan_control_exercise_" + watch_id + "_" + panel["id"],
+                    }, blocking=True)
+        finally:
+            if tasks.get(key) is asyncio.current_task():
+                tasks.pop(key, None)
+
+    tasks[key] = asyncio.create_task(check())
+
+
+def validate_local_command(body):
+    if body.get("command") not in ("start_exercise", "stop_exercise"):
+        return
+    identity, issued = body.get("operation_id"), body.get("issued_at_ms")
+    now = int(time.time() * 1000)
+    if (not isinstance(identity, str) or not re.fullmatch(r"[a-f0-9-]{36}", identity)
+            or type(issued) is not int or issued > now + 5000 or issued < now - 120000):
+        raise ValueError("Invalid Exercise command")

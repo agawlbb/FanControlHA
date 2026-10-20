@@ -78,6 +78,7 @@ async def async_unload_entry(hass, entry):
     if runtime:
         tasks = [op.get("task") for op in runtime.get("exercise_operations", {}).values() if op.get("task") is not None]
         tasks.extend(runtime.get("music_tasks", {}).values())
+        tasks.extend(runtime.get("exercise_checks", {}).values())
         runtime.get("exercise_operations", {}).clear()
         for task in tasks:
             task.cancel()
@@ -212,11 +213,22 @@ class WatchView(HomeAssistantView):
                         await save(runtime)
                         async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
                     result = configuration(watch)
+                elif action in ("exercise_music_list", "exercise_music_chunk"):
+                    from .local_music import private_music
+                    result = await private_music(self.hass, watch, body)
                 elif action in ("panel_state", "panel_command"):
                     panel = find_panel(watch, body.get("panel_id"))
                     if panel.get("type") == "driving" and action == "panel_command" and body.get("panel_config") != panel:
                         raise ValueError("Driving target changed")
                     if action == "panel_command" and panel.get("type") == "exercise" and body.get("command") != "wake":
+                        local_music = body.get("music_mode") == "local"
+                        if local_music:
+                            from .exercise import validate_local_command
+                            validate_local_command(body)
+                            # New Apple-only behavior; preserve existing Wear OS delivery.
+                            vehicle_panel = {k:v for k,v in panel.items() if not k.startswith("spotify_")}
+                            if watch.get("platform") != "watch_os" or body.get("panel_config") not in (panel, vehicle_panel):
+                                raise ValueError("Exercise target changed")
                         operations = runtime.setdefault("exercise_operations", {})
                         operation_key = (packet["watch_id"], panel["id"])
                         if body.get("command") == "start_music":
@@ -236,12 +248,21 @@ class WatchView(HomeAssistantView):
                         else:
                             if body.get("command") == "start_exercise":
                                 cancel_stop(operations, operation_key)
-                            result = await execute_exercise(self.hass, panel, body.get("command"), Context(user_id=owner.id))
+                            result = await execute_exercise(self.hass, panel, body.get("command"), Context(user_id=owner.id), relaxed_temperature=local_music)
+                        if local_music and (body.get("command") == "start_exercise" or
+                                body.get("command") == "stop_exercise" and result.get("operation_status") in ("pending", "complete")):
+                            from .exercise import schedule_vehicle_check
+                            schedule_vehicle_check(self.hass, runtime, packet["watch_id"], panel, body)
                     else:
                         if action == "panel_command":
                             domain, service, data = panel_command(self.hass, panel, body.get("command"))
                             await self.hass.services.async_call(domain, service, data, blocking=True, context=Context(user_id=owner.id))
-                        result = panel_state(self.hass, panel)
+                        if (action == "panel_state" and panel.get("type") == "exercise"
+                                and body.get("music_mode") == "local" and watch.get("platform") == "watch_os"):
+                            from .exercise import exercise_state
+                            result = exercise_state(self.hass, panel, relaxed_temperature=True)
+                        else:
+                            result = panel_state(self.hass, panel)
                 elif action in ("state", "command"):
                     entity = body.get("entity")
                     if entity not in devices([item["entity"] for item in watch["devices"]]):

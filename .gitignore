@@ -29,3 +29,8 @@ home-assistant_v2.db*
 .tools/
 .idea/
 .vscode/
+private-music/
+fan_control_music/
+*.[mM][pP]3
+*.[mM]4[aA]
+*.[aA][aA][cC]

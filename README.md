@@ -184,3 +184,19 @@ Validation: 169 integration tests, Python compilation, and isolated Home Assista
 Driving panels optionally approve a distinct horn button in the native panel manager. Apple Watch 0.3.0 displays garage, trunk, climate ON/OFF and horn in a 2×2 grid. Climate OFF checks the turn-off capability. Horn presses dispatch once and do not claim physical confirmation. Existing panels and Android controls remain supported; only approved panel roles can dispatch commands.
 
 Apple Watch can swipe through approved controls for the foreground session without changing HA selection. Reopening restores the HA-selected control. Only a displayed, settled vehicle entry may wake; swiping past a page before it settles cancels that entry work.
+# Apple Watch Exercise local music source update
+
+For the Apple Watch local player, create **`/config/fan_control_music/`** privately
+on HA and copy DRM-free `.mp3`, `.m4a`, or `.aac` tracks there. Prefix filenames
+`01`, `02`, etc. for fixed playback order. Do not use `www` (public static files)
+or commit audio to any repository. Limits: 25 files, 30 MiB each, 200 MiB total.
+The paired Apple Watch downloads and verifies tracks using **Connection settings →
+Sync exercise music**, then plays offline. No Spotify calls are made by this path.
+
+The Apple client sends `music_mode: local`. Stop still requests 63°F but confirms
+unlocked + climate on after temperature dispatch succeeds; temperature mismatch
+does not block completion or Driving selection. At one minute, a passive HA state
+check produces a persistent notification on mismatch/unknown (Start: locked;
+Stop: unlocked + climate on). This is an HA notification, not a mobile push.
+Checks never wake vehicles and are scoped to the same watch, owner, panel and
+latest command. Legacy clients retain their existing confirmation behavior.
