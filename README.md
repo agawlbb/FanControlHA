@@ -245,3 +245,10 @@ HA service. Watch swipe navigation does not alter HA's selected-panel subscripti
 Polling remains available if push is disabled, delayed or unavailable.
 
 The hosted source and deployment/protocol instructions are in [relay](relay/README.md).
+
+Validation for source `cd8426fe70198987f5aaf703fa3c9e55430d82f4`:
+[CI passed](https://github.com/agawlbb/FanControlHA/actions/runs/39500308307)
+199 tests (195 integration tests and four relay tests), Python compilation, PHP
+syntax checks and the isolated real Home Assistant 2026.10.1 runtime check. The
+relay is deployed but unconfigured. This version has not been deployed to live HA;
+APNs credentials, watch signing and real background delivery remain pending.
