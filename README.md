@@ -243,3 +243,5 @@ produce no hint. One-second bursts combine into a single request. APNs hints
 contain only a refresh flag. These paths never invoke vehicle wake or any other
 HA service. Watch swipe navigation does not alter HA's selected-panel subscription.
 Polling remains available if push is disabled, delayed or unavailable.
+
+The hosted source and deployment/protocol instructions are in [relay](relay/README.md).
