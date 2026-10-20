@@ -184,7 +184,13 @@ Validation: 169 integration tests, Python compilation, and isolated Home Assista
 Driving panels optionally approve a distinct horn button in the native panel manager. Apple Watch 0.3.0 displays garage, trunk, climate ON/OFF and horn in a 2×2 grid. Climate OFF checks the turn-off capability. Horn presses dispatch once and do not claim physical confirmation. Existing panels and Android controls remain supported; only approved panel roles can dispatch commands.
 
 Apple Watch can swipe through approved controls for the foreground session without changing HA selection. Reopening restores the HA-selected control. Only a displayed, settled vehicle entry may wake; swiping past a page before it settles cancels that entry work.
-# Apple Watch Exercise local music source update
+# Apple Watch Exercise local music — HA 0.6.0 deployed
+
+Deployed October 20, 2026 alongside watch 0.5.0 (10). HA configuration validation,
+restart and loaded-state checks passed. Deployed Python compilation passed; four
+test MP3 tracks were transferred privately and verified against local SHA-256
+hashes. No audio is committed. On the updated watch, use Connection settings >
+Sync exercise music. Hardware playback and physical vehicle checks remain.
 
 For the Apple Watch local player, create **`/config/fan_control_music/`** privately
 on HA and copy DRM-free `.mp3`, `.m4a`, or `.aac` tracks there. Prefix filenames
