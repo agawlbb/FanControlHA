@@ -257,5 +257,6 @@ configuration directory to `/homeassistant`). All changed files matched on
 readback, configuration validation passed and HA restarted with the integration
 loaded. The native push options confirm enabled and the matching installation;
 the system log has no Fan Control errors. No push or vehicle command was sent
-as a deployment test. A signed watch update and actual APNs delivery remain
-pending.
+as a deployment test. Watch 0.5.1 (13) is now available in the existing Internal
+TestFlight group after production push-entitlement verification. Installing it
+and checking actual APNs registration/delivery remain physical-watch checks.
