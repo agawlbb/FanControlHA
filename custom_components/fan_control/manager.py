@@ -72,7 +72,16 @@ class Manager:
         nonce_key = packet["watch_id"] + ":" + packet["nonce"]
         if watch is None or nonce_key in self.nonces or len(self.nonces) >= 4096:
             raise ValueError("Invalid request")
-        body = open_request(watch["secret"], packet)
+        credential = packet.get("credential", "watch")
+        if credential not in ("watch", "companion"):
+            raise ValueError("Invalid credential")
+        secret = watch.get("companion", {}).get("secret") if credential == "companion" else watch["secret"]
+        if not secret:
+            raise ValueError("Companion not linked")
+        body = open_request(secret, packet)
+        if credential == "companion" and (not isinstance(body, dict) or body.get("action") not in (
+                "companion_snapshot", "companion_settings", "companion_push_register", "push_receipts")):
+            raise ValueError("Companion action not permitted")
         if not isinstance(body, dict):
             raise ValueError("Invalid request")
         self.nonces[nonce_key] = self.clock() + REQUEST_WINDOW * 2

@@ -3,7 +3,7 @@ import time
 import uuid
 import re
 
-PHASES = {"received", "skipped_active", "connection_unavailable", "refresh_started",
+PHASES = {"phone_received", "phone_saved", "watch_saved", "watch_opened", "phone_failed", "received", "skipped_active", "connection_unavailable", "refresh_started",
           "refresh_superseded", "config_fetched", "selection_saved", "refresh_failed", "opened", "registration_failed"}
 
 
@@ -64,6 +64,13 @@ def record_events(watch, watch_id, events):
             event["reported_at_ms"] = int(time.time() * 1000)
             attempt["events"].append(event)
             del attempt["events"][:-60]
+            if event["phase"] == "phone_received":
+                attempt["phone_received_at_ms"] = event["at_ms"]
+            if event["phase"] == "phone_saved":
+                attempt["phone_saved_at_ms"] = event["at_ms"]
+            if event["phase"] == "watch_saved":
+                attempt["watch_saved_at_ms"] = event["at_ms"]
+                attempt["receipt"] = "received_by_watch"
             if event["phase"] == "received":
                 attempt["receipt"] = "received"
                 attempt.setdefault("received_at_ms", event["at_ms"])

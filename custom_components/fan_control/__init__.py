@@ -223,7 +223,12 @@ class WatchView(HomeAssistantView):
                 if owner is None or not owner.is_active or not owner.is_admin:
                     raise ValueError("Pairing owner unavailable")
                 action = body.get("action")
-                if action == "config":
+                if action in ("companion_grant", "companion_revoke", "companion_snapshot", "companion_settings", "companion_push_register"):
+                    from .companion import handle
+                    result = handle(self.hass, watch, body)
+                    await save(runtime)
+                    async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
+                elif action == "config":
                     # Authenticated client identification also repairs watches paired
                     # before Apple Watch platform metadata was supported.
                     if body.get("platform") == "watch_os" and watch.get("platform") != "watch_os":
@@ -310,7 +315,7 @@ class WatchView(HomeAssistantView):
                         result["attributes"] = {key: state.attributes[key] for key in ("percentage", "supported_features", "friendly_name") if key in state.attributes}
                 else:
                     raise ValueError("Unknown action")
-                return response(seal_response(watch["secret"], packet, result))
+                return response(seal_response(watch["companion"]["secret"] if packet.get("credential") == "companion" else watch["secret"], packet, result))
         except Exception as error:
             # Never expose cryptographic, entity, credential, or service details in public responses.
             from cryptography.exceptions import InvalidTag

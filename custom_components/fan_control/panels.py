@@ -63,6 +63,8 @@ def configuration(watch):
     result["devices"] = list(watch["devices"]) + [{"entity": "panel." + panel["id"], "title": panel["name"], "panel": panel} for panel in panels]
     if watch.get("active_panel"):
         result["entity"] = "panel." + find_panel(watch, watch["active_panel"])["id"]
+    if watch.get("platform") == "watch_os":
+        result["companion_settings"] = watch.get("companion_settings", {"order": [], "headset": "Joseph's Buds2 Pro"})
     return result
 
 
