@@ -2,7 +2,13 @@
 
 Public endpoint: `https://coffeybean.com/FanControl/` (the directory URL may redirect from the slashless form; POST directly to the trailing slash).
 
-PHP 8.2+ with OpenSSL, PDO SQLite and cURL HTTP/2. No external packages.
+Supported, security-patched PHP with OpenSSL, PDO SQLite and cURL HTTP/2. No external packages.
+As of October 21, 2026, the minimum patched versions are 8.2.35, 8.3.36,
+8.4.27 and 8.5.12 within their respective branches, or vendor-confirmed backports.
+The [PHP advisory](https://www.php.net/archive/2026.php) for CVE-2026-109618 and
+CVE-2026-109619 requires patching the actual serving runtime and reloading PHP
+processes. This repository does not install that patch. The hosted relay's
+current patch level remains to be verified; no hosting settings were changed.
 Deploy only `public/index.php` and `public/.htaccess` into `/home/negaau5/coffeybean.com/FanControl/`.
 Private configuration, Apple key, provider JWT cache and SQLite database belong in
 `/home/negaau5/fancontrol-private/`, outside all document roots. The private path
