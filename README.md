@@ -8,7 +8,9 @@ selection or wakes vehicles. Phone self-unlink leaves watch commands authorized.
 
 Deploy the updated relay public/index.php for phone APNs routing. Existing SQLite
 rows migrate to the legacy watch destination; phone tokens use the fixed topic
-dev.fancontrol.watch. No new APNs private key or HA admin token is needed. Phone
+dev.fancontrol.watch. The relay APNs key must authorize this phone topic in the
+selected environment; a team-scoped key can serve multiple apps. The phone never
+receives an Apple private key or HA admin token. Phone
 registration replaces the legacy watch destination for that watch. Diagnostics
 distinguish phone receipt/save and watch save; missing evidence remains unknown.
 
