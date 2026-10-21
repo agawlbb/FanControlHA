@@ -217,13 +217,14 @@ class WatchView(HomeAssistantView):
             packet = await read_body(request)
             async with runtime["lock"]:
                 watch, body = runtime["manager"].authenticate(packet)
+                response_secret = watch["companion"]["secret"] if packet.get("credential") == "companion" else watch["secret"]
                 # Persist consumed nonces before dispatch: a restart cannot replay a command.
                 await save(runtime)
                 owner = await self.hass.auth.async_get_user(watch["owner_id"])
                 if owner is None or not owner.is_active or not owner.is_admin:
                     raise ValueError("Pairing owner unavailable")
                 action = body.get("action")
-                if action in ("companion_grant", "companion_revoke", "companion_snapshot", "companion_settings", "companion_push_register"):
+                if action in ("companion_grant", "companion_revoke", "companion_snapshot", "companion_settings", "companion_push_register", "companion_unlink"):
                     from .companion import handle
                     result = handle(self.hass, watch, body)
                     await save(runtime)
@@ -315,7 +316,7 @@ class WatchView(HomeAssistantView):
                         result["attributes"] = {key: state.attributes[key] for key in ("percentage", "supported_features", "friendly_name") if key in state.attributes}
                 else:
                     raise ValueError("Unknown action")
-                return response(seal_response(watch["companion"]["secret"] if packet.get("credential") == "companion" else watch["secret"], packet, result))
+                return response(seal_response(response_secret, packet, result))
         except Exception as error:
             # Never expose cryptographic, entity, credential, or service details in public responses.
             from cryptography.exceptions import InvalidTag

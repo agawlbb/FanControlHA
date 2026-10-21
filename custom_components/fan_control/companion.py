@@ -15,7 +15,7 @@ def handle(hass, watch, body):
         # unlink rotates this credential; never export the watch command key.
         linked = watch.setdefault("companion", {"secret": secrets.token_hex(32)})
         return {**configuration(watch), "token": linked["secret"], "companion": True}
-    if action == "companion_revoke":
+    if action in ("companion_revoke", "companion_unlink"):
         watch.pop("companion", None)
         if watch.get("push_registration", {}).get("destination") == "phone":
             watch.pop("push_registration", None)

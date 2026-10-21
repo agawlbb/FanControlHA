@@ -80,7 +80,7 @@ class Manager:
             raise ValueError("Companion not linked")
         body = open_request(secret, packet)
         if credential == "companion" and (not isinstance(body, dict) or body.get("action") not in (
-                "companion_snapshot", "companion_settings", "companion_push_register", "push_receipts")):
+                "companion_snapshot", "companion_settings", "companion_push_register", "companion_unlink", "push_receipts")):
             raise ValueError("Companion action not permitted")
         if not isinstance(body, dict):
             raise ValueError("Invalid request")

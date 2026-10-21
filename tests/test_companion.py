@@ -57,3 +57,15 @@ async def test_wear_os_cannot_grant_companion():
     hass, manager, wid, _ = runtime()
     result = await WatchView(hass).post(request(packet(wid, manager.watches[wid]["secret"], {"action": "companion_grant"})))
     assert result.status == 403 and "companion" not in manager.watches[wid]
+
+@pytest.mark.asyncio
+async def test_phone_can_revoke_itself_without_revoking_watch():
+    hass, manager, wid, _ = runtime(); watch = manager.watches[wid]; watch["platform"] = "watch_os"
+    secret = watch["secret"]; view = WatchView(hass)
+    value = packet(wid, secret, {"action": "companion_grant"})
+    result = await view.post(request(value)); phone = unpack(result, value, secret)["token"]
+    value = {**packet(wid, phone, {"action": "companion_unlink"}), "credential": "companion"}
+    result = await view.post(request(value)); assert result.status == 200
+    assert unpack(result, value, phone)["status"] == "revoked"
+    assert "companion" not in watch
+    assert (await view.post(request(packet(wid, secret, {"action": "config"})))).status == 200
