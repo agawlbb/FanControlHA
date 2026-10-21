@@ -1,3 +1,17 @@
+## Apple companion — 0.7.0
+
+The iPhone uses a separate revocable observation/preferences key issued by its
+paired watch. It cannot dispatch device/panel commands or grant keys. Snapshots
+contain approved roles, passive states, a persisted sequence and HA time.
+Settings writes require the current revision; tile order never changes active
+selection or wakes vehicles. Phone self-unlink leaves watch commands authorized.
+
+Deploy the updated relay public/index.php for phone APNs routing. Existing SQLite
+rows migrate to the legacy watch destination; phone tokens use the fixed topic
+dev.fancontrol.watch. No new APNs private key or HA admin token is needed. Phone
+registration replaces the legacy watch destination for that watch. Diagnostics
+distinguish phone receipt/save and watch save; missing evidence remains unknown.
+
 # Fan Control for Home Assistant
 
 > **Wear OS maintenance paused — October 20, 2026.** The Wear OS app is no longer actively maintained as of this date. Wear OS code changes and builds are paused unless explicitly requested by the maintainer. Existing Wear OS source and releases remain available, but updates and fixes should not be expected during the pause. This pause applies only to Wear OS; Apple Watch and the shared Home Assistant integration are outside its scope.

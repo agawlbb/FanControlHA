@@ -74,3 +74,10 @@ oversized/invalid requests, installation isolation, token replacement and APNs
 responses using sandbox credentials. Verify HTTP/2 support on the host and a real
 watch receiving a hint without issuing a vehicle wake. No live push can be tested
 until credentials and a watch token exist.
+
+## iPhone companion routing
+
+Registration optionally includes destination=phone (default watch). Existing
+SQLite registrations migrate to destination=watch. The fixed phone topic is
+dev.fancontrol.watch; watch registrations retain the configured watch topic.
+Arbitrary client topics are rejected. Deploy this public entry with HA 0.7.0.
