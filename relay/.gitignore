@@ -1,0 +1,5 @@
+*.png
+*.sqlite*
+*.p8
+config.php
+provider.lock

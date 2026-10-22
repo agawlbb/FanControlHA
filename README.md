@@ -226,3 +226,37 @@ Validation: 187 integration tests passed; Python compilation passed. Required
 physical checks remain actual vehicle delivery, delayed state/Driving selection
 and the watch notification with its screen inactive. No physical commands were
 sent by automated validation.
+
+## Apple Watch passive push refresh (0.6.2)
+
+Configure **Apple Watch push refresh** in the native integration options to enable
+the relay at `https://coffeybean.com/FanControl/`. Configure its Apple APNs signing
+key and the same installation ID/shared secret on the host first. This is opt-in;
+watch tokens go to the hosted relay and Apple. HA credentials, entity IDs, car
+names and observations are never sent there. The secret stays in HA storage and
+the private host configuration, outside public document roots.
+
+Only Apple watches with an authenticated APNs registration participate. HA sends
+hints for selected-panel/configuration changes and meaningful changes in that
+watch's selected panel's observed fields. Inactive cars and unrelated attributes
+produce no hint. One-second bursts combine into a single request. APNs hints
+contain only a refresh flag. These paths never invoke vehicle wake or any other
+HA service. Watch swipe navigation does not alter HA's selected-panel subscription.
+Polling remains available if push is disabled, delayed or unavailable.
+
+The hosted source and deployment/protocol instructions are in [relay](relay/README.md).
+
+Validation for source `cd8426fe70198987f5aaf703fa3c9e55430d82f4`:
+[CI passed](https://github.com/agawlbb/FanControlHA/actions/runs/39500308307)
+199 tests (195 integration tests and four relay tests), Python compilation, PHP
+syntax checks and the isolated real Home Assistant 2026.10.1 runtime check. The
+relay is deployed and configured with a private production APNs key. Version
+0.6.2 was installed in live HA after verifying the previous source and saving a
+backup in `/config/.ha_mcp/fan-control-before-push-062` (File editor maps this
+configuration directory to `/homeassistant`). All changed files matched on
+readback, configuration validation passed and HA restarted with the integration
+loaded. The native push options confirm enabled and the matching installation;
+the system log has no Fan Control errors. No push or vehicle command was sent
+as a deployment test. Watch 0.5.1 (13) is now available in the existing Internal
+TestFlight group after production push-entitlement verification. Installing it
+and checking actual APNs registration/delivery remain physical-watch checks.

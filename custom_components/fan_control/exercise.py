@@ -396,7 +396,8 @@ async def select_driving_after_stop(hass, runtime, panel, key, operation, result
         watch["active_panel"], watch["revision"] = selected, revision + 1
         try:
             await runtime["store"].async_save({"watches": runtime["manager"].watches,
-                                               "nonces": runtime["manager"].nonces})
+                                               "nonces": runtime["manager"].nonces,
+                                               "push_settings": runtime.get("push_settings", {})})
         except Exception:
             watch["active_panel"], watch["revision"] = previous, revision
             import logging
