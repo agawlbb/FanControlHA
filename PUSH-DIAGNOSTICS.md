@@ -1,4 +1,9 @@
-# Push reconciliation — HA 0.6.3 / watch 0.5.2 (14)
+# Push reconciliation
+
+Current HA 0.7.0 / Apple 0.6.0 routes routine hints to the iPhone; phone receipt/save
+and watch save are independent evidence. The historical validation below predates
+the companion. Current delivery evidence is in DEPLOYMENT-0.7.0.md. Watch recovery
+is reached by holding a page; there is no Settings swipe page.
 
 Validation: [CI run 39514438444](https://github.com/agawlbb/FanControlHA/actions/runs/39514438444) passed on source `4321fd2e0b7bebc9255f2bc7a828d0cd7a5ca128`: 205 integration/relay tests, Python compilation, PHP syntax checks, integration ZIP packaging, patched package/version and image checks, and real HA 2026.10.2 startup/options/actions/unload. Production HA/relay were not deployed and physical push delivery remains to be checked. The workflow's previous disabled state was restored after this validation run.
 

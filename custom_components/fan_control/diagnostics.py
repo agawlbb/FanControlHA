@@ -11,6 +11,8 @@ async def async_get_config_entry_diagnostics(hass, entry):
         watches.append({"watch_id": watch_id, "name": watch.get("name"), "platform": watch.get("platform"),
                         "active_panel": config["entity"], "revision": config["revision"],
                         "registered_with_ha": bool(watch.get("push_registration")),
+                        "push_destination": watch.get("push_registration", {}).get("destination", "watch"),
+                        "companion_linked": bool(watch.get("companion")),
                         "push_history": watch.get("push_history", []),
                         "uncorrelated_watch_events": watch.get("push_client_events", [])})
     return {"push_enabled": bool(runtime.get("push_settings", {}).get("enabled")),

@@ -1,3 +1,19 @@
+## Apple companion — 0.7.0
+
+The iPhone uses a separate revocable observation/preferences key issued by its
+paired watch. It cannot dispatch device/panel commands or grant keys. Snapshots
+contain approved roles, passive states, a persisted sequence and HA time.
+Settings writes require the current revision; tile order never changes active
+selection or wakes vehicles. Phone self-unlink leaves watch commands authorized.
+
+Deploy the updated relay public/index.php for phone APNs routing. Existing SQLite
+rows migrate to the legacy watch destination; phone tokens use the fixed topic
+dev.fancontrol.watch. The relay APNs key must authorize this phone topic in the
+selected environment; a team-scoped key can serve multiple apps. The phone never
+receives an Apple private key or HA admin token. Phone
+registration replaces the legacy watch destination for that watch. Diagnostics
+distinguish phone receipt/save and watch save; missing evidence remains unknown.
+
 # Fan Control for Home Assistant
 
 > **Wear OS maintenance paused — October 20, 2026.** The Wear OS app is no longer actively maintained as of this date. Wear OS code changes and builds are paused unless explicitly requested by the maintainer. Existing Wear OS source and releases remain available, but updates and fixes should not be expected during the pause. This pause applies only to Wear OS; Apple Watch and the shared Home Assistant integration are outside its scope.
@@ -18,7 +34,7 @@ The Work Morning layout places battery percentage on the left and the climate to
 
 Choose **Select active panel** in the panel manager, or use the watch's new **Tile panel** select entity in an automation with `select.select_option`. Its options are `devices` and your stable panel IDs (default `work_morning`). Alternatively call **Fan Control: Set active watch panel** (`fan_control.set_active_panel`) with the Watch ID and Panel ID. `devices` restores the active device controls. The existing **Tile device** selector and `fan_control.set_active_device` also restore device controls when selecting a device.
 
-Panels are stored per watch. Up to eight panels and sixteen total device/panel pages are supported. Their configured roles authorize only percentage reads, climate power, and their selected script; the watch cannot substitute another entity or an arbitrary service. Panel ID stays fixed when editing so automations do not break. Changing panel entities invalidates existing tile buttons until refresh. Removing the active panel falls back to device controls. Changes arrive on visible refreshes or the next periodic background configuration check. Background checks read selection/configuration only; they do not read device state, wake a vehicle, or run commands, and they do not hold Wi-Fi on.
+Panels are stored per watch. Up to eight panels and sixteen total device/panel pages are supported. Their configured roles authorize only percentage reads, climate power, and their selected script; the watch cannot substitute another entity or an arbitrary service. Panel ID stays fixed when editing so automations do not break. Changing panel entities invalidates existing tile buttons until refresh. Removing the active panel falls back to device controls. For Apple clients, routine updates arrive through phone snapshots; direct command validation remains on the watch. Background checks read selection/configuration only; they do not read device state, wake a vehicle, or run commands, and they do not hold Wi-Fi on.
 
 
 ## Install
@@ -29,11 +45,11 @@ HACS can also install it as a custom Integration repository when the repository 
 
 ## Pair and configure
 
-1. Connect the watch directly to your home Wi-Fi. In the watch app, choose **Find Home Assistant**, then select the discovered instance. Manual address entry is available when multicast discovery is blocked.
+1. On Apple Watch, enter your local or HTTPS HA address and choose Pair.
 2. Keep the watch's pairing screen visible. On a phone or computer, open **Settings → Devices & services → Fan Control → Configure → Pair a watch**.
 3. Enter the eight-digit code. Compare **all 12 fingerprint characters** with the watch and confirm only when they match.
-4. Name the watch, select an administrator who owns its access, choose 1–16 devices and an active tile device from that list. Local and remote addresses default from HA's network settings; review them before approving. The remote address must use HTTPS and already provide working remote access (including Home Assistant Cloud).
-5. The watch receives and encrypts its connection settings locally. Add the Fan Control tile. Tap the tile title to open controls for the HA-selected device/panel.
+4. Name the watch, select an administrator who owns its access, approve devices/panels and an opening selection (a fan is optional). Local and remote addresses default from HA's network settings; review them before approving. The remote address must use HTTPS and already provide working remote access (including Home Assistant Cloud).
+5. The watch stores its connection settings securely. Add the Active Panel complication if desired; opening restores HA selection.
 
 To change devices, use **Configure → Configure watch devices and addresses**. To stop a watch connecting, use **Configure → Revoke a watch**. Removing the integration deletes its stored credentials. Removing an owning administrator or disabling that account also prevents its watches from connecting.
 
@@ -41,7 +57,7 @@ To change devices, use **Configure → Configure watch devices and addresses**. 
 
 Fans retain power controls and six speeds mapped to **16, 33, 50, 66, 83, 100 percent**. Lights, switches and input booleans support power controls; scripts and scenes have a Run button. Additional device types can be added with explicit control adapters and server allowlists.
 
-Use the **Fan Control: Set active watch device** action (`fan_control.set_active_device`) in any automation or script. Select an entity already approved for that watch and supply its full Watch ID, shown on the watch's setup screen. This changes the desired tile device without turning the physical device on or off. Changes appear on the next visible tile refresh, controls opening, or periodic background configuration check. A tap on a stale tile is converted into a refresh if the active device changed, rather than controlling the newly selected device.
+Use the **Fan Control: Set active watch device** action (`fan_control.set_active_device`) in any automation or script. Select an entity already approved for that watch and supply its full Watch ID, shown on the watch's setup screen. This changes the desired tile device without turning the physical device on or off. Apple clients receive selection through phone snapshots and visible entry validation. A tap on a stale tile is converted into a refresh if the active device changed, rather than controlling the newly selected device.
 
 Each paired watch also has a **Tile device** select entity in HA. You can choose its active device from that dropdown or use the standard **Select: Select option** action in automations, without entering a watch ID. A revoked watch's selector becomes unavailable.
 
@@ -184,79 +200,22 @@ Validation: 169 integration tests, Python compilation, and isolated Home Assista
 Driving panels optionally approve a distinct horn button in the native panel manager. Apple Watch 0.3.0 displays garage, trunk, climate ON/OFF and horn in a 2×2 grid. Climate OFF checks the turn-off capability. Horn presses dispatch once and do not claim physical confirmation. Existing panels and Android controls remain supported; only approved panel roles can dispatch commands.
 
 Apple Watch can swipe through approved controls for the foreground session without changing HA selection. Reopening restores the HA-selected control. Only a displayed, settled vehicle entry may wake; swiping past a page before it settles cancels that entry work.
-# Apple Watch Exercise local music — HA 0.6.0 deployed
+## Apple companion and local Exercise behavior
 
-Deployed October 20, 2026 alongside watch 0.5.0 (10). HA configuration validation,
-restart and loaded-state checks passed. Deployed Python compilation passed; four
-test MP3 tracks were transferred privately and verified against local SHA-256
-hashes. No audio is committed. On the updated watch, use Connection settings >
-Sync exercise music. Hardware playback and physical vehicle checks remain.
+Apple 0.6.0 (15) imports and synchronizes offline audio through the iPhone.
+Legacy explicit HA music download remains available from watch recovery; keep
+those files privately under `/config/fan_control_music/`, outside public/source
+folders. Limits are 25 files, 30 MiB each and 200 MiB total.
 
-For the Apple Watch local player, create **`/config/fan_control_music/`** privately
-on HA and copy DRM-free `.mp3`, `.m4a`, or `.aac` tracks there. Prefix filenames
-`01`, `02`, etc. for fixed playback order. Do not use `www` (public static files)
-or commit audio to any repository. Limits: 25 files, 30 MiB each, 200 MiB total.
-The paired Apple Watch downloads and verifies tracks using **Connection settings →
-Sync exercise music**, then plays offline. No Spotify calls are made by this path.
+Local-mode Stop sends absolute unlock and climate-on independently, without
+stale online gating. Available observations must confirm unlocked and climate on;
+the 63 F request is best effort. Completion selects the uniquely matching Driving
+panel once. One-minute checks are passive and scoped to the latest operation.
 
-The Apple client sends `music_mode: local`. Stop still requests 63°F but confirms
-unlocked + climate on; temperature dispatch failure or mismatch
-does not block completion or Driving selection. At one minute, a passive HA state
-check produces a persistent notification on mismatch/unknown (Start: locked;
-Stop: unlocked + climate on). This is an HA notification, not a mobile push.
-Checks never wake vehicles and are scoped to the same watch, owner, panel and
-latest command. Legacy clients retain their existing confirmation behavior.
-
-## Apple Watch Exercise fixes — HA 0.6.1
-
-Local Stop delivers absolute unlock and climate-on intents without waiting for
-the online sensor or temperature capability metadata. Each required step is
-independent: an unlock failure does not suppress climate delivery. Available HA
-observations must confirm unlocked and climate on; offline cached states and
-service acknowledgments do not confirm success. The 63°F request remains best
-effort. Completion still selects the uniquely matching Driving panel once.
-
-The one-minute passive vehicle check is scheduled before dispatch, including
-failed delivery. Watch 0.5.0 (12) also schedules a local unconfirmed notification
-when an Exercise action starts, subject to notification permission. HA's own
-notification remains persistent in HA. No temperature check contributes to
-either deadline's confirmation.
-
-Validation: 187 integration tests passed; Python compilation passed. Required
-physical checks remain actual vehicle delivery, delayed state/Driving selection
-and the watch notification with its screen inactive. No physical commands were
-sent by automated validation.
-
-## Apple Watch passive push refresh (0.6.2)
-
-Configure **Apple Watch push refresh** in the native integration options to enable
-the relay at `https://coffeybean.com/FanControl/`. Configure its Apple APNs signing
-key and the same installation ID/shared secret on the host first. This is opt-in;
-watch tokens go to the hosted relay and Apple. HA credentials, entity IDs, car
-names and observations are never sent there. The secret stays in HA storage and
-the private host configuration, outside public document roots.
-
-Only Apple watches with an authenticated APNs registration participate. HA sends
-hints for selected-panel/configuration changes and meaningful changes in that
-watch's selected panel's observed fields. Inactive cars and unrelated attributes
-produce no hint. One-second bursts combine into a single request. APNs hints
-contain only a refresh flag. These paths never invoke vehicle wake or any other
-HA service. Watch swipe navigation does not alter HA's selected-panel subscription.
-Polling remains available if push is disabled, delayed or unavailable.
-
-The hosted source and deployment/protocol instructions are in [relay](relay/README.md).
-
-Validation for source `cd8426fe70198987f5aaf703fa3c9e55430d82f4`:
-[CI passed](https://github.com/agawlbb/FanControlHA/actions/runs/39500308307)
-199 tests (195 integration tests and four relay tests), Python compilation, PHP
-syntax checks and the isolated real Home Assistant 2026.10.1 runtime check. The
-relay is deployed and configured with a private production APNs key. Version
-0.6.2 was installed in live HA after verifying the previous source and saving a
-backup in `/config/.ha_mcp/fan-control-before-push-062` (File editor maps this
-configuration directory to `/homeassistant`). All changed files matched on
-readback, configuration validation passed and HA restarted with the integration
-loaded. The native push options confirm enabled and the matching installation;
-the system log has no Fan Control errors. No push or vehicle command was sent
-as a deployment test. Watch 0.5.1 (13) is now available in the existing Internal
-TestFlight group after production push-entitlement verification. Installing it
-and checking actual APNs registration/delivery remain physical-watch checks.
+Configure optional Apple push refresh in the native integration options, using
+`https://coffeybean.com/FanControl/`. Only selected-panel/configuration changes and
+meaningful selected observations generate hints; inactive cars do not. The phone
+replaces the legacy watch destination after registration. The relay receives no HA
+account credential, entity state or audio and cannot issue vehicle commands.
+See [relay setup](relay/README.md), [diagnostics](PUSH-DIAGNOSTICS.md),
+[deployment evidence](DEPLOYMENT-0.7.0.md) and [security](SECURITY.md).

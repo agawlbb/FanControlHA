@@ -79,14 +79,15 @@ try {
     if (!is_string($watch) || !preg_match('/^[A-Za-z0-9._-]{1,128}$/D', $watch) ||
         !in_array($action, ['register','unregister','refresh'], true)) { reply(400, ['error'=>'invalid_request']); }
     $allowed = match ($action) {
-        'register' => ['action','watch_id','device_token','environment'],
+        'register' => ['action','watch_id','device_token','environment','destination'],
         'unregister' => ['action','watch_id'],
         'refresh' => ['action','watch_id','reason','update_id'],
     };
     if (array_diff(array_keys($body), $allowed)) { reply(400, ['error'=>'unknown_fields']); }
     if ($action === 'register' && (!is_string($body['device_token'] ?? null) ||
         !preg_match('/^[a-fA-F0-9]{64,200}$/D', $body['device_token']) ||
-        !in_array($body['environment'] ?? '', ['sandbox','production'], true))) {
+        !in_array($body['environment'] ?? '', ['sandbox','production'], true) ||
+        !in_array($body['destination'] ?? 'watch', ['watch','phone'], true))) {
         reply(400, ['error'=>'invalid_registration']);
     }
     if ($action === 'refresh' && !in_array($body['reason'] ?? '', ['selection','configuration','active_panel_state'], true)) {
@@ -101,6 +102,8 @@ try {
     $db->exec('PRAGMA busy_timeout=3000');
     $db->exec('CREATE TABLE IF NOT EXISTS nonces (installation TEXT, nonce TEXT, created INTEGER, PRIMARY KEY(installation,nonce))');
     $db->exec('CREATE TABLE IF NOT EXISTS watches (installation TEXT, watch TEXT, token TEXT, environment TEXT, PRIMARY KEY(installation,watch))');
+    $columns = $db->query('PRAGMA table_info(watches)')->fetchAll(PDO::FETCH_COLUMN, 1);
+    if (!in_array('destination', $columns, true)) { $db->exec("ALTER TABLE watches ADD COLUMN destination TEXT NOT NULL DEFAULT 'watch'"); }
     $db->exec('CREATE TABLE IF NOT EXISTS attempts (installation TEXT, watch TEXT, update_id TEXT, created INTEGER, status TEXT, apns_status INTEGER, apns_reason TEXT, PRIMARY KEY(installation,watch,update_id))');
     $db->exec('DELETE FROM nonces WHERE created < '.(time()-600));
     try {
@@ -114,14 +117,14 @@ try {
     $count->execute([$installation,time()-60]);
     if ((int)$count->fetchColumn() > 60) { header('Retry-After: 60'); reply(429, ['error'=>'rate_limited']); }
     if ($action === 'register') {
-        $db->prepare('INSERT OR REPLACE INTO watches VALUES (?,?,?,?)')->execute([$installation,$watch,strtolower($body['device_token']),$body['environment']]);
+        $db->prepare('INSERT OR REPLACE INTO watches (installation,watch,token,environment,destination) VALUES (?,?,?,?,?)')->execute([$installation,$watch,strtolower($body['device_token']),$body['environment'],$body['destination'] ?? 'watch']);
         reply(200, ['status'=>'registered']);
     }
     if ($action === 'unregister') {
         $db->prepare('DELETE FROM watches WHERE installation=? AND watch=?')->execute([$installation,$watch]);
         reply(200, ['status'=>'unregistered']);
     }
-    $query = $db->prepare('SELECT token, environment FROM watches WHERE installation=? AND watch=?');
+    $query = $db->prepare('SELECT token, environment, destination FROM watches WHERE installation=? AND watch=?');
     $query->execute([$installation,$watch]);
     $registration = $query->fetch(PDO::FETCH_ASSOC);
     if (!$registration) { reply(404, ['error'=>'watch_not_registered']); }
@@ -148,7 +151,7 @@ try {
     curl_setopt_array($curl, [CURLOPT_POST=>true,CURLOPT_RETURNTRANSFER=>true,
         CURLOPT_HTTP_VERSION=>CURL_HTTP_VERSION_2_0,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>12,
         CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
-        CURLOPT_HTTPHEADER=>['authorization: bearer '.$cached['jwt'],'apns-topic: '.$config['topic'],
+        CURLOPT_HTTPHEADER=>['authorization: bearer '.$cached['jwt'],'apns-topic: '.($registration['destination'] === 'phone' ? 'dev.fancontrol.watch' : $config['topic']),
             'apns-id: '.$update,
             'apns-push-type: background','apns-priority: 5','apns-expiration: '.(time()+300),
             'apns-collapse-id: fancontrol-refresh','content-type: application/json'],
