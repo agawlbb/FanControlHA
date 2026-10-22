@@ -11,6 +11,14 @@ function reply(int $status, array $body): never {
     exit;
 }
 function b64(string $s): string { return rtrim(strtr(base64_encode($s), '+/', '-_'), '='); }
+function refresh_payload(string $update, string $watch): string {
+    return json_encode(['aps'=>['content-available'=>1], 'fancontrol'=>['refresh'=>true,'update_id'=>$update,'watch_id'=>$watch]], JSON_THROW_ON_ERROR);
+}
+function apns_evidence(string $update, int $status, string|false $result): array {
+    $reason = is_string($result) ? (json_decode($result, true)['reason'] ?? '') : '';
+    if (!is_string($reason) || !preg_match('/^[A-Za-z0-9]{0,80}$/D', $reason)) { $reason = 'Unknown'; }
+    return ['apns_id'=>$update,'apns_status'=>$status,'apns_reason'=>$reason,'watch_delivery_confirmed'=>false];
+}
 function jwt(array $config): string {
     $text = b64(json_encode(['alg'=>'ES256','kid'=>$config['key_id']], JSON_THROW_ON_ERROR)).'.'.
         b64(json_encode(['iss'=>$config['team_id'],'iat'=>time()], JSON_THROW_ON_ERROR));
@@ -73,7 +81,7 @@ try {
     $allowed = match ($action) {
         'register' => ['action','watch_id','device_token','environment'],
         'unregister' => ['action','watch_id'],
-        'refresh' => ['action','watch_id','reason'],
+        'refresh' => ['action','watch_id','reason','update_id'],
     };
     if (array_diff(array_keys($body), $allowed)) { reply(400, ['error'=>'unknown_fields']); }
     if ($action === 'register' && (!is_string($body['device_token'] ?? null) ||
@@ -84,11 +92,16 @@ try {
     if ($action === 'refresh' && !in_array($body['reason'] ?? '', ['selection','configuration','active_panel_state'], true)) {
         reply(400, ['error'=>'invalid_reason']);
     }
+    if ($action === 'refresh' && isset($body['update_id']) &&
+        (!is_string($body['update_id']) || !preg_match('/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/D', $body['update_id']))) {
+        reply(400, ['error'=>'invalid_update_id']);
+    }
     umask(0077);
     $db = new PDO('sqlite:'.$private.'/relay.sqlite', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
     $db->exec('PRAGMA busy_timeout=3000');
     $db->exec('CREATE TABLE IF NOT EXISTS nonces (installation TEXT, nonce TEXT, created INTEGER, PRIMARY KEY(installation,nonce))');
     $db->exec('CREATE TABLE IF NOT EXISTS watches (installation TEXT, watch TEXT, token TEXT, environment TEXT, PRIMARY KEY(installation,watch))');
+    $db->exec('CREATE TABLE IF NOT EXISTS attempts (installation TEXT, watch TEXT, update_id TEXT, created INTEGER, status TEXT, apns_status INTEGER, apns_reason TEXT, PRIMARY KEY(installation,watch,update_id))');
     $db->exec('DELETE FROM nonces WHERE created < '.(time()-600));
     try {
         $db->prepare('INSERT INTO nonces VALUES (?,?,?)')->execute([$installation,$nonce,time()]);
@@ -115,6 +128,10 @@ try {
     if (!function_exists('curl_init') || !(curl_version()['features'] & CURL_VERSION_HTTP2)) {
         reply(503, ['error'=>'http2_unavailable']);
     }
+    $hex = bin2hex(random_bytes(16));
+    $update = $body['update_id'] ?? substr($hex,0,8).'-'.substr($hex,8,4).'-4'.substr($hex,13,3).'-a'.substr($hex,17,3).'-'.substr($hex,20);
+    $db->prepare('INSERT OR IGNORE INTO attempts VALUES (?,?,?,?,?,?,?)')->execute([$installation,$watch,$update,time(),'attempted',null,null]);
+    $db->prepare('DELETE FROM attempts WHERE installation=? AND rowid NOT IN (SELECT rowid FROM attempts WHERE installation=? ORDER BY rowid DESC LIMIT 1000)')->execute([$installation,$installation]);
     // Reuse a provider token to avoid APNs TooManyProviderTokenUpdates errors.
     $lock = fopen($private.'/provider.lock', 'c+');
     if (!$lock || !flock($lock, LOCK_EX)) { throw new RuntimeException('Lock unavailable'); }
@@ -132,20 +149,24 @@ try {
         CURLOPT_HTTP_VERSION=>CURL_HTTP_VERSION_2_0,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>12,
         CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
         CURLOPT_HTTPHEADER=>['authorization: bearer '.$cached['jwt'],'apns-topic: '.$config['topic'],
+            'apns-id: '.$update,
             'apns-push-type: background','apns-priority: 5','apns-expiration: '.(time()+300),
             'apns-collapse-id: fancontrol-refresh','content-type: application/json'],
-        CURLOPT_POSTFIELDS=>' {"aps":{"content-available":1},"fancontrol":{"refresh":true}}']);
+        CURLOPT_POSTFIELDS=>refresh_payload($update,$watch)]);
     $result = curl_exec($curl);
     $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
     curl_close($curl);
-    if ($result === false) { reply(502, ['error'=>'push_delivery_unknown']); }
-    if ($status === 200) { reply(202, ['status'=>'accepted_by_apns','watch_delivery_confirmed'=>false]); }
-    $reason = json_decode($result, true)['reason'] ?? '';
+    $evidence = apns_evidence($update,$status,$result);
+    $reason = $evidence['apns_reason'];
+    $outcome = $result === false ? 'delivery_unknown' : ($status === 200 ? 'accepted_by_apns' : 'rejected');
+    $db->prepare('UPDATE attempts SET status=?, apns_status=?, apns_reason=? WHERE installation=? AND watch=? AND update_id=?')->execute([$outcome,$status,$reason,$installation,$watch,$update]);
+    if ($result === false) { reply(502, ['error'=>'push_delivery_unknown'] + $evidence); }
+    if ($status === 200) { reply(202, ['status'=>'accepted_by_apns'] + $evidence); }
     if ($status === 410 || ($status === 400 && $reason === 'BadDeviceToken')) {
         $db->prepare('DELETE FROM watches WHERE installation=? AND watch=? AND token=? AND environment=?')->execute([$installation,$watch,$registration['token'],$registration['environment']]);
-        reply(410, ['error'=>'registration_expired']);
+        reply(410, ['error'=>'registration_expired'] + $evidence);
     }
-    reply(502, ['error'=>'push_rejected']);
+    reply(502, ['error'=>'push_rejected'] + $evidence);
 } catch (Throwable) {
     // Never disclose keys, tokens, request bodies or internal paths.
     reply(503, ['error'=>'service_unavailable']);

@@ -239,6 +239,12 @@ class WatchView(HomeAssistantView):
                     await save(runtime)
                     async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
                     result = {"status": "registered_with_ha"}
+                elif action == "push_receipts":
+                    if watch.get("platform") != "watch_os":
+                        raise ValueError("Apple Watch required")
+                    from .push_trace import record_events
+                    result = record_events(watch, packet["watch_id"], body.get("events"))
+                    await save(runtime)
                 elif action in ("exercise_music_list", "exercise_music_chunk"):
                     from .local_music import private_music
                     result = await private_music(self.hass, watch, body)

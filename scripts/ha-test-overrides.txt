@@ -1,0 +1,4 @@
+# CI-only security overrides for Home Assistant 2026.10.2's older exact pins.
+# Remove once the HA release used by this harness requires patched versions.
+uv==0.13.4
+Pillow==13.0.0

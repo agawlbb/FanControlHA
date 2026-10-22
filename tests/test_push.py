@@ -54,7 +54,9 @@ async def test_inactive_car_and_irrelevant_attributes_do_not_push():
     watch["revision"] += 1
     push.updated()
     await asyncio.gather(*list(push.tasks.values()))
-    assert push.send.call_args.args[0] == {"action":"refresh","watch_id":watch_id,"reason":"selection"}
+    attempt = watch["push_history"][-1]
+    assert push.send.call_args.args[0] == {"action":"refresh","watch_id":watch_id,"reason":"selection","update_id":attempt["update_id"]}
+    assert attempt["panel"] == "panel.white" and attempt["receipt"] == "unknown"
     assert "button.white" not in dependencies(watch)
     hass.services.async_call.assert_not_awaited()
     await push.close()
