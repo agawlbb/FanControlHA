@@ -26,6 +26,11 @@ def validate_driving(value):
         if not isinstance(horn, str) or len(horn) > 160 or not re.fullmatch(r"button\.[a-z0-9_]+", horn) or horn == result["wake_entity"]:
             raise ValueError("Invalid horn role")
         result["horn_entity"] = horn
+    podcast = value.get("podcast_entity")
+    if podcast:
+        if not isinstance(podcast, str) or len(podcast) > 160 or not re.fullmatch(r"script\.[a-z0-9_]+", podcast):
+            raise ValueError("Invalid podcast script role")
+        result["podcast_entity"] = podcast
     return add_color(result, value)
 
 
@@ -49,6 +54,8 @@ def driving_state(hass, panel):
     horn = hass.states.get(panel.get("horn_entity", ""))
     # Button state is the last press timestamp (or unknown before its first press).
     result["honk_available"] = awake and horn is not None and horn.state != "unavailable"
+    podcast = hass.states.get(panel.get("podcast_entity", ""))
+    result["podcast_available"] = podcast is not None and podcast.state == "off"
     return result
 
 
@@ -64,4 +71,6 @@ def driving_command(hass, panel, action):
         return "climate", "turn_off", {"entity_id": panel["climate_entity"]}
     if action == "honk" and state["honk_available"]:
         return "button", "press", {"entity_id": panel["horn_entity"]}
+    if action == "podcast" and state["podcast_available"]:
+        return "script", "turn_on", {"entity_id": panel["podcast_entity"]}
     raise ValueError("Driving action unavailable")

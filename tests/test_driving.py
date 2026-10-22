@@ -68,6 +68,21 @@ def test_horn_requires_explicit_role_and_awake_vehicle():
         with pytest.raises(ValueError): validate_panel({**PANEL, "horn_entity": role})
 
 
+def test_podcast_requires_configured_script_but_not_awake_vehicle():
+    hass, _, _, states = setup_driving()
+    with pytest.raises(ValueError): panel_command(hass, PANEL, "podcast")
+    panel = validate_panel({**PANEL, "podcast_entity": "script.example_podcast"})
+    states["script.example_podcast"] = SimpleNamespace(state="off", attributes={})
+    states["binary_sensor.example_online"].state = "off"
+    assert panel_state(hass, panel)["podcast_available"]
+    assert panel_command(hass, panel, "podcast") == ("script", "turn_on", {"entity_id": "script.example_podcast"})
+    for state in ("on", "unknown", "unavailable"):
+        states["script.example_podcast"].state = state
+        with pytest.raises(ValueError): panel_command(hass, panel, "podcast")
+    for entity in ("button.podcast", "script.invalid-name", "script."):
+        with pytest.raises(ValueError): validate_panel({**PANEL, "podcast_entity": entity})
+
+
 def test_climate_off_requires_turn_off_capability_and_available_state():
     hass, _, _, states = setup_driving()
     states["climate.example_car"].attributes["supported_features"] = 256

@@ -1,5 +1,7 @@
 # Fan Control for Home Assistant
 
+> **Wear OS maintenance paused — October 20, 2026.** The Wear OS app is no longer actively maintained as of this date. Wear OS code changes and builds are paused unless explicitly requested by the maintainer. Existing Wear OS source and releases remain available, but updates and fixes should not be expected during the pause. This pause applies only to Wear OS; Apple Watch and the shared Home Assistant integration are outside its scope.
+
 Licensed under GNU AGPL-3.0-only. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
 
 Pair and configure a standalone Wear OS watch entirely inside Home Assistant. The watch discovers HA on home Wi-Fi, displays an eight-digit code and fingerprint, and receives its selected devices and local/remote addresses after you approve pairing. No password or HA access token needs to be typed on the watch. No hosted website or phone companion is required.
@@ -7,6 +9,8 @@ Pair and configure a standalone Wear OS watch entirely inside Home Assistant. Th
 Requires Home Assistant 2026.10 or newer and the integration-enabled Fan Control watch app. This is an initial custom integration, not an official Home Assistant component.
 
 ## Configurable watch panels
+
+Available starting with HA 0.5.2: Apple Watch Driving panels support an optional **Podcast script** selector in the native panel editor. Select `script.baby_blue_podcast_play` to start the first unfinished episode from the selected queue on Spotify Joe's current device. The role is stored per panel as `podcast_entity`; only that approved script can be dispatched by the `podcast` command. Missing, running, unknown or unavailable scripts cannot dispatch. Podcast availability is independent of vehicle wake state. Existing Driving panels remain compatible without this optional role. The 0.5.2 Podcast update passed 172 integration tests and was deployed on October 20, 2026. Its selector and saved script links were verified through native options flows; playback was not executed for validation. Later 0.6.0 source work is separate from this deployment.
 
 In **Settings → Devices & services → Fan Control → Configure → Manage watch panels**, choose a watch and **Add Work Morning panel**. Select a battery percentage sensor, a climate power entity (or switch/input boolean), and a script using HA entity pickers. Panel names and button labels are editable; no personal entity IDs are compiled into the watch. Battery sensors must use `%`; climate entities must support HA power on/off. Missing sensor values show `?%`, unavailable climate controls are disabled, and running scripts cannot be started again from the panel.
 
@@ -174,3 +178,51 @@ Apple Watch pairing accepts the watch name, owner and HA addresses without requi
 Exercise explicitly requires a playlist when its optional Spotify player is selected. Leave both blank to skip Spotify. Invalid submissions retain their field values, including the watch name. Only Driving has a car identification color picker. Device registry names update from the saved watch configuration, and authenticated watchOS identification repairs legacy Apple Watch records on first connection from watch app 0.2.0.
 
 Validation: 169 integration tests, Python compilation, and isolated Home Assistant 2026.10.1 startup, pairing, panel, selection and device metadata checks passed. These tests send no physical device commands.
+
+## Apple Watch Driving controls (integration 0.5.1)
+
+Driving panels optionally approve a distinct horn button in the native panel manager. Apple Watch 0.3.0 displays garage, trunk, climate ON/OFF and horn in a 2×2 grid. Climate OFF checks the turn-off capability. Horn presses dispatch once and do not claim physical confirmation. Existing panels and Android controls remain supported; only approved panel roles can dispatch commands.
+
+Apple Watch can swipe through approved controls for the foreground session without changing HA selection. Reopening restores the HA-selected control. Only a displayed, settled vehicle entry may wake; swiping past a page before it settles cancels that entry work.
+# Apple Watch Exercise local music — HA 0.6.0 deployed
+
+Deployed October 20, 2026 alongside watch 0.5.0 (10). HA configuration validation,
+restart and loaded-state checks passed. Deployed Python compilation passed; four
+test MP3 tracks were transferred privately and verified against local SHA-256
+hashes. No audio is committed. On the updated watch, use Connection settings >
+Sync exercise music. Hardware playback and physical vehicle checks remain.
+
+For the Apple Watch local player, create **`/config/fan_control_music/`** privately
+on HA and copy DRM-free `.mp3`, `.m4a`, or `.aac` tracks there. Prefix filenames
+`01`, `02`, etc. for fixed playback order. Do not use `www` (public static files)
+or commit audio to any repository. Limits: 25 files, 30 MiB each, 200 MiB total.
+The paired Apple Watch downloads and verifies tracks using **Connection settings →
+Sync exercise music**, then plays offline. No Spotify calls are made by this path.
+
+The Apple client sends `music_mode: local`. Stop still requests 63°F but confirms
+unlocked + climate on; temperature dispatch failure or mismatch
+does not block completion or Driving selection. At one minute, a passive HA state
+check produces a persistent notification on mismatch/unknown (Start: locked;
+Stop: unlocked + climate on). This is an HA notification, not a mobile push.
+Checks never wake vehicles and are scoped to the same watch, owner, panel and
+latest command. Legacy clients retain their existing confirmation behavior.
+
+## Apple Watch Exercise fixes — HA 0.6.1
+
+Local Stop delivers absolute unlock and climate-on intents without waiting for
+the online sensor or temperature capability metadata. Each required step is
+independent: an unlock failure does not suppress climate delivery. Available HA
+observations must confirm unlocked and climate on; offline cached states and
+service acknowledgments do not confirm success. The 63°F request remains best
+effort. Completion still selects the uniquely matching Driving panel once.
+
+The one-minute passive vehicle check is scheduled before dispatch, including
+failed delivery. Watch 0.5.0 (12) also schedules a local unconfirmed notification
+when an Exercise action starts, subject to notification permission. HA's own
+notification remains persistent in HA. No temperature check contributes to
+either deadline's confirmation.
+
+Validation: 187 integration tests passed; Python compilation passed. Required
+physical checks remain actual vehicle delivery, delayed state/Driving selection
+and the watch notification with its screen inactive. No physical commands were
+sent by automated validation.
