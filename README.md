@@ -219,7 +219,8 @@ replaces the legacy watch destination after registration. The relay receives no 
 account credential, entity state or audio and cannot issue vehicle commands.
 See [relay setup](relay/README.md), [diagnostics](PUSH-DIAGNOSTICS.md),
 [deployment evidence](DEPLOYMENT-0.7.0.md) and [security](SECURITY.md).
-# Apple vehicle operations — 0.8.0
+
+## Apple vehicle operations — 0.8.0
 
 Apple clients can submit an authenticated `vehicle_submit` with approved panel roles,
 an operation UUID and `issued_at_ms`, then use `vehicle_status` / `vehicle_cancel` with
@@ -237,4 +238,3 @@ and ambiguous one-shot requests are never replayed by FanControl.
 The morning Exercise automation now uses Joe's arrival alone at either exercise
 location during 06:00–09:00, avoiding delayed car GPS. Configuration changes and
 routine snapshots never wake vehicles. HA 0.8.0 must be deployed before Apple 0.7.0.
-

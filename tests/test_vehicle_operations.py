@@ -173,3 +173,42 @@ async def test_other_client_and_changed_duplicate_are_rejected(monkeypatch):
     op = rt["vehicle_operations"][(wid, body["operation_id"])]
     op["task"].cancel()
     await asyncio.gather(op["task"], return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_completed_wake_http_call_is_shared_until_readiness_deadline(monkeypatch):
+    hass, watch, wid, states, clock, body = setup(monkeypatch, asleep=True)
+    rt = hass.data["fan_control"]
+    op = {"id":body["operation_id"], "issued":clock[0], "watch_id":wid, "owner":watch["owner_id"],
+          "secret":watch["secret"], "panel":copy.deepcopy(PANEL), "status":"pending"}
+    # Let the first wake call return while the sensor remains offline.
+    first = asyncio.create_task(vo.wake(hass, rt, op))
+    real_sleep = asyncio.sleep
+    for _ in range(3): await real_sleep(0)
+    second = asyncio.create_task(vo.wake(hass, rt, {**op, "id":"second"}))
+    await asyncio.gather(first, second)
+    assert [c.args[1] for c in hass.services.async_call.await_args_list] == ["press"]
+
+
+@pytest.mark.asyncio
+async def test_definitive_rejection_can_alert_early(monkeypatch):
+    from homeassistant.exceptions import ServiceValidationError
+    hass, watch, wid, states, clock, body = setup(monkeypatch)
+    async def deliver(domain, name, data, **kwargs):
+        if domain == "lock": raise ServiceValidationError("permission rejected")
+    hass.services.async_call.side_effect = deliver
+    vo.handle(hass, hass.data["fan_control"], wid, watch, body)
+    op = await complete(hass, wid, body)
+    assert op["status"] == "failed"
+    assert clock[0] < body["issued_at_ms"] + 60000
+    assert hass.services.async_call.await_args_list[-1].args[2]["title"] == "Exercise request failed"
+
+
+@pytest.mark.asyncio
+async def test_companion_cannot_submit_operations(monkeypatch):
+    hass, watch, wid, states, clock, body = setup(monkeypatch)
+    watch["companion"] = {"secret":"a" * 64}
+    encrypted = packet(wid, watch["companion"]["secret"], body)
+    encrypted["credential"] = "companion"
+    assert (await WatchView(hass).post(request(encrypted))).status == 403
+    assert not hass.data["fan_control"].get("vehicle_operations")

@@ -87,15 +87,16 @@ async def wake(hass, runtime, op):
         return
     key = (op["owner"], p["wake_entity"], p["awake_entity"])
     wakes = runtime.setdefault("vehicle_wakes", {})
-    task = wakes.get(key)
-    if task is None or task.done():
+    attempt = wakes.get(key)
+    if attempt is None or now_ms() >= attempt["expires"]:
         async def deliver():
             try:
                 async with asyncio.timeout(WAKE_SECONDS):
                     await service(hass, runtime, op, *panel_command(hass, p, "wake"))
             except Exception:
                 pass  # A wake timeout is ambiguous; readiness observations decide.
-        task = wakes[key] = asyncio.create_task(deliver())
+        task = asyncio.create_task(deliver())
+        wakes[key] = {"task": task, "expires": now_ms() + WAKE_SECONDS * 1000}
     op["status"], op["stage"] = "waking", "wake"
     end = min(op["issued"] + WAKE_SECONDS * 1000, op["issued"] + DELIVERY_SECONDS * 1000)
     while not online(hass, p) and now_ms() < end:
@@ -118,7 +119,7 @@ async def finish(hass, runtime, op, status, reason=""):
             operations[key] = op
             await select_driving_after_stop(hass, runtime, op["panel"], key, op, {"operation_status": "complete"})
     if op["command"] in ("start_exercise", "stop_exercise"):
-        notification_id = "fan_control_vehicle_" + op["watch_id"] + "_" + op["panel"]["id"]
+        notification_id = "fan_control_vehicle_" + op["id"]
         if status == "complete":
             await notify(hass, "dismiss", {"notification_id": notification_id})
         elif status in ("failed", "unconfirmed"):
@@ -248,7 +249,7 @@ def handle(hass, runtime, watch_id, watch, body):
         elif op["status"] == "unconfirmed" and matches(hass, op):
             # Late evidence can clear an obsolete alert but must not select a panel.
             op["status"] = "complete"
-            notification_id = "fan_control_vehicle_" + watch_id + "_" + op["panel"]["id"]
+            notification_id = "fan_control_vehicle_" + op["id"]
             op["cleanup_task"] = asyncio.create_task(notify(hass, "dismiss", {"notification_id": notification_id}))
         return snapshot(hass, op)
     p = find_panel(watch, body.get("panel_id"))
@@ -261,6 +262,14 @@ def handle(hass, runtime, watch_id, watch, body):
     now = now_ms()
     if type(issued) is not int or issued < STARTED_MS or issued > now + 5000 or now >= issued + DELIVERY_SECONDS * 1000:
         raise ValueError("Expired operation")
+    latest = runtime.setdefault("vehicle_latest", {})
+    target = (watch_id, p["id"])
+    if body["command"] != "wake":
+        previous = latest.get(target)
+        if previous is not None and previous["issued"] >= issued:
+            raise ValueError("Stale operation")
+        if previous is not None and previous["command"] in ("start_exercise", "stop_exercise"):
+            asyncio.create_task(notify(hass, "dismiss", {"notification_id": "fan_control_vehicle_" + previous["id"]}))
     for old_key, old in list(operations.items()):
         if now > old["issued"] + 600000:
             operations.pop(old_key)
@@ -275,5 +284,7 @@ def handle(hass, runtime, watch_id, watch, body):
           "secret": watch["secret"], "panel": copy.deepcopy(p), "command": body["command"],
           "status": "pending", "stage": "accepted", "steps": []}
     operations[key] = op
+    if body["command"] != "wake":
+        latest[target] = op
     op["task"] = asyncio.create_task(run(hass, runtime, op))
     return snapshot(hass, op)

@@ -96,7 +96,7 @@ async def async_unload_entry(hass, entry):
         tasks.extend(runtime.get("music_tasks", {}).values())
         tasks.extend(runtime.get("exercise_checks", {}).values())
         tasks.extend(op["task"] for op in runtime.get("vehicle_operations", {}).values() if not op["task"].done())
-        tasks.extend(task for task in runtime.get("vehicle_wakes", {}).values() if not task.done())
+        tasks.extend(attempt["task"] for attempt in runtime.get("vehicle_wakes", {}).values() if not attempt["task"].done())
         runtime.get("exercise_operations", {}).clear()
         for task in tasks:
             task.cancel()
