@@ -32,3 +32,18 @@ behavior require paired-device testing; exactly-once physical effects cannot be
 promised when a target provides no deduplication or definitive acknowledgment.
 
 No deployment or live physical commands were used for automated validation.
+
+## Validation record — October 24, 2026
+
+HA 0.9.0 implementation `a5514ffeec2d5a331dd88ea6968c13bf519b579c`:
+242 local tests passed; Python compilation passed. Full CI regression/package/PHP
+checks and isolated Home Assistant 2026.10.2 load/options/durable-store/reload/unload
+checks passed at https://github.com/agawlbb/FanControlHA/actions/runs/40128342770.
+The HA workflow was temporarily enabled for validation and restored to its prior
+manually disabled state. No live HA service command or deployment was performed.
+
+Apple 0.8.0/build 17 implementation and 42 core tests plus unsigned iPhone/watch
+simulator build evidence are documented in FanControlWatch/COMMAND-DELIVERY.md.
+Both components must be installed together before evaluating the new command API.
+Paired-device cellular, immediate wrist-down/navigation, sleeping-car and physical
+state checks remain required; automated tests use synthetic targets only.
