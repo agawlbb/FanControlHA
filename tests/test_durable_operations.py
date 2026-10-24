@@ -130,3 +130,46 @@ async def test_unrelated_selection_or_other_panel_edit_does_not_drop_intent(monk
     hass.services.async_call.side_effect = deliver
     vo.handle(hass, rt, wid, watch, body)
     assert (await complete(hass, wid, body))["status"] == "complete"
+
+@pytest.mark.asyncio
+async def test_wake_reselects_donor_when_cancelled_during_persistence(monkeypatch):
+    hass, watch, wid, states, clock, body = setup(monkeypatch, asleep=True)
+    rt = hass.data["fan_control"]
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def save_boundary():
+        if not entered.is_set():
+            entered.set()
+            await release.wait()
+    monkeypatch.setattr(vo, "persist", lambda runtime: save_boundary())
+    vo.handle(hass, rt, wid, watch, body)
+    await entered.wait()
+    clock[0] += 1
+    second = {**body, "operation_id":"12345678-1234-1234-1234-123456789abd", "issued_at_ms":clock[0], "command":"stop_exercise"}
+    vo.handle(hass, rt, wid, watch, second)
+    async def deliver(domain, name, data, **kwargs):
+        if name == "press": states[body["panel_config"]["awake_entity"]].state = "on"
+        if name == "turn_on": states[body["panel_config"]["climate_entity"]].state = "cool"
+    hass.services.async_call.side_effect = deliver
+    release.set()
+    op = await complete(hass, wid, second)
+    await asyncio.gather(*(v["task"] for v in rt["vehicle_operations"].values()), return_exceptions=True)
+    assert op["status"] == "complete"
+    assert [c.args[1] for c in hass.services.async_call.await_args_list].count("press") == 1
+
+@pytest.mark.asyncio
+async def test_restart_preserves_shared_wake_ambiguity_for_replacement(monkeypatch):
+    hass, watch, wid, states, clock, body = setup(monkeypatch, asleep=True)
+    rt = hass.data["fan_control"]
+    vo.handle(hass, rt, wid, watch, body)
+    first = rt["vehicle_operations"][(wid, body["operation_id"])]
+    first["task"].cancel()
+    await asyncio.gather(first["task"], return_exceptions=True)
+    first.update(status="cancelled", wake_started=True)
+    saved = {"operations":vo.records(rt)}
+    rt["vehicle_operations"] = {}; rt["vehicle_latest"] = {}
+    await vo.restore(hass, rt, saved)
+    clock[0] += 1
+    second = {**body, "operation_id":"12345678-1234-1234-1234-123456789abd", "issued_at_ms":clock[0]}
+    vo.handle(hass, rt, wid, watch, second)
+    await complete(hass, wid, second)
+    assert "press" not in [c.args[1] for c in hass.services.async_call.await_args_list]

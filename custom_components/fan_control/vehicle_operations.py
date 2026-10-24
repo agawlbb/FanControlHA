@@ -1,4 +1,4 @@
-"""Apple-only, bounded vehicle intents. Network waits never hold the runtime lock."""
+"""Durable Apple command intents. Network waits never hold the runtime lock."""
 import asyncio
 import copy
 import re
@@ -75,6 +75,12 @@ async def restore(hass, runtime, saved):
             previous = runtime.setdefault("vehicle_latest", {}).get(key)
             if previous is None or previous["issued"] < op["issued"]:
                 runtime["vehicle_latest"][key] = op
+        if op.get("wake_started") and op["panel"].get("wake_entity") and now_ms() < op["issued"] + WAKE_SECONDS * 1000:
+            p = op["panel"]
+            key = (op["owner"], p["wake_entity"], p["awake_entity"])
+            runtime.setdefault("vehicle_wakes", {})[key] = {
+                "expires": op["issued"] + WAKE_SECONDS * 1000, "dispatched": True,
+                "task": asyncio.create_task(asyncio.sleep(0))}
         if op["status"] in ACTIVE:
             op["task"] = asyncio.create_task(run(hass, runtime, op))
         else:
@@ -140,6 +146,8 @@ async def service(hass, runtime, op, domain, name, data):
     await persist(runtime)
     if not await valid(hass, runtime, op) or now_ms() >= op["issued"] + DELIVERY_SECONDS * 1000:
         raise asyncio.CancelledError
+    if data.get("entity_id") == op["panel"].get("wake_entity"):
+        op["wake_call_started"] = True
     await hass.services.async_call(domain, name, data, blocking=True, context=Context(user_id=op["owner"]))
 
 
@@ -151,20 +159,33 @@ async def wake(hass, runtime, op):
     key = (op["owner"], p["wake_entity"], p["awake_entity"])
     wakes = runtime.setdefault("vehicle_wakes", {})
     attempt = wakes.get(key)
-    if attempt is None or now_ms() >= attempt["expires"]:
+    if attempt is None or now_ms() >= attempt["expires"] or (attempt["task"].done() and not attempt.get("dispatched")):
+        record = {"expires": now_ms() + WAKE_SECONDS * 1000, "dispatched": False}
         async def deliver():
-            try:
-                async with asyncio.timeout(WAKE_SECONDS):
-                    # The wake belongs to the vehicle, not the superseded UI intent.
-                    candidates = [v for v in runtime.get("vehicle_operations", {}).values()
-                                  if v["status"] in ACTIVE and v["owner"] == op["owner"]
-                                  and v["panel"].get("wake_entity") == p["wake_entity"]]
-                    candidate = next((v for v in candidates if v["status"] != "cancelled"), op)
-                    await service(hass, runtime, candidate, *panel_command(hass, p, "wake"))
-            except Exception:
-                pass  # A wake timeout is ambiguous; readiness observations decide.
-        task = asyncio.create_task(deliver())
-        wakes[key] = {"task": task, "expires": now_ms() + WAKE_SECONDS * 1000}
+            # Reselect a live donor if cancellation wins before the external call.
+            # Once the external call starts its outcome is ambiguous: never replay.
+            while now_ms() < record["expires"]:
+                candidates = [v for v in runtime.get("vehicle_operations", {}).values()
+                              if v["status"] in ACTIVE and v["owner"] == op["owner"]
+                              and v["panel"].get("wake_entity") == p["wake_entity"]
+                              and v["panel"].get("awake_entity") == p["awake_entity"]]
+                candidate = next(iter(candidates), op if op["status"] in ACTIVE else None)
+                if candidate is None:
+                    return
+                try:
+                    async with asyncio.timeout(max(0.01, (record["expires"] - now_ms()) / 1000)):
+                        await service(hass, runtime, candidate, *panel_command(hass, p, "wake"))
+                    return
+                except asyncio.CancelledError:
+                    if candidate.get("wake_call_started") or runtime.get("unloading"):
+                        return
+                    candidate["status"] = "cancelled"
+                except Exception:
+                    return
+                finally:
+                    record["dispatched"] = record["dispatched"] or candidate.get("wake_call_started", False)
+        record["task"] = asyncio.create_task(deliver())
+        wakes[key] = record
     op["status"], op["stage"] = "waking", "wake"
     end = min(op["issued"] + WAKE_SECONDS * 1000, op["issued"] + DELIVERY_SECONDS * 1000)
     while not online(hass, p) and now_ms() < end:
