@@ -219,3 +219,22 @@ replaces the legacy watch destination after registration. The relay receives no 
 account credential, entity state or audio and cannot issue vehicle commands.
 See [relay setup](relay/README.md), [diagnostics](PUSH-DIAGNOSTICS.md),
 [deployment evidence](DEPLOYMENT-0.7.0.md) and [security](SECURITY.md).
+# Apple vehicle operations — 0.8.0
+
+Apple clients can submit an authenticated `vehicle_submit` with approved panel roles,
+an operation UUID and `issued_at_ms`, then use `vehicle_status` / `vehicle_cancel` with
+that UUID. Duplicate submissions keep the original target and deadline. Companion
+credentials cannot use these APIs. Existing client command APIs retain their behavior.
+
+Vehicle taps join or initiate one wake attempt, wait for HA readiness, and preserve
+absolute requested outcomes. Slow services run outside the shared request lock.
+Delivery ends 180 seconds after the tap; a final 15 seconds allows read-only evidence
+checks. Exercise alerts remain silent during normal wake/retry delays. Missing evidence
+is reported as **not confirmed**, not proof of physical failure. Unlock and climate-on
+are required for Stop; 63 F remains best effort. Scripts/horn acknowledge dispatch only,
+and ambiguous one-shot requests are never replayed by FanControl.
+
+The morning Exercise automation now uses Joe's arrival alone at either exercise
+location during 06:00–09:00, avoiding delayed car GPS. Configuration changes and
+routine snapshots never wake vehicles. HA 0.8.0 must be deployed before Apple 0.7.0.
+

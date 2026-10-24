@@ -14,7 +14,9 @@ async def async_get_config_entry_diagnostics(hass, entry):
                         "push_destination": watch.get("push_registration", {}).get("destination", "watch"),
                         "companion_linked": bool(watch.get("companion")),
                         "push_history": watch.get("push_history", []),
-                        "uncorrelated_watch_events": watch.get("push_client_events", [])})
+                        "uncorrelated_watch_events": watch.get("push_client_events", []),
+                        "vehicle_operations": [{key: op[key] for key in ("id", "issued", "command", "status", "stage", "finished_ms", "reason") if key in op}
+                            for op in runtime.get("vehicle_operations", {}).values() if op["watch_id"] == watch_id]})
     return {"push_enabled": bool(runtime.get("push_settings", {}).get("enabled")),
             "receipt_unknown_means": "No watch receipt reported; not proof of nondelivery. History is bounded to 120 attempts per watch.",
             "watches": watches}

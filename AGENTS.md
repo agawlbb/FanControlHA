@@ -5,7 +5,7 @@
 The canonical repositories are `C:/Users/mailb/StudioProjects/FanControl/apple-watch`
 (agawlbb/FanControlWatch) and `C:/Users/mailb/StudioProjects/FanControl/ha-integration`
 (agawlbb/FanControlHA). Work only in the repository assigned to the task.
-The connected laptop owner is the chat "Explore push wakeups for Apple Watch";
+The connected laptop owner is the chat "FanControl owner" (01a15b0b-d82d-7dd2-b5ce-4e3f9bf236b8);
 coordinate handoff before another chat writes. Verify current heads and local
 changes before editing; preserve unexpected work. Labelled recovery copies remain
 archives and must not become active checkouts.
@@ -27,7 +27,7 @@ same watch/owner/configuration. Companion keys authorize observations/preference
 never physical commands. Unlink phone revokes only that companion; watch revocation
 revokes both. Revision-check preference writes and keep selection independent of
 swipe order. Configuration, snapshots, push and diagnostics never wake vehicles.
-Only explicit settled visible watch entry may request wake.
+Explicit settled visible watch entry and a user-tapped vehicle command may request or join one bounded wake attempt. Passive updates and command retries never initiate additional wakes. Apple command operations expire after 180 seconds plus a 15-second read-only confirmation grace period; expected delays do not trigger one-minute alerts.
 
 Preserve at-most-once one-shot dispatch and bounded Stop continuation. Completed
 Stop selects a uniquely matching Driving panel once, without physical commands;

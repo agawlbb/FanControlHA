@@ -95,6 +95,8 @@ async def async_unload_entry(hass, entry):
         tasks = [op.get("task") for op in runtime.get("exercise_operations", {}).values() if op.get("task") is not None]
         tasks.extend(runtime.get("music_tasks", {}).values())
         tasks.extend(runtime.get("exercise_checks", {}).values())
+        tasks.extend(op["task"] for op in runtime.get("vehicle_operations", {}).values() if not op["task"].done())
+        tasks.extend(task for task in runtime.get("vehicle_wakes", {}).values() if not task.done())
         runtime.get("exercise_operations", {}).clear()
         for task in tasks:
             task.cancel()
@@ -237,6 +239,9 @@ class WatchView(HomeAssistantView):
                         await save(runtime)
                         async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
                     result = configuration(watch)
+                elif action in ("vehicle_submit", "vehicle_status", "vehicle_cancel"):
+                    from .vehicle_operations import handle
+                    result = handle(self.hass, runtime, packet["watch_id"], watch, body)
                 elif action == "push_register":
                     if watch.get("platform") != "watch_os":
                         raise ValueError("Apple Watch required")

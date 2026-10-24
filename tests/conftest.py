@@ -10,6 +10,7 @@ sys.modules["homeassistant.components.http"].HomeAssistantView = type("HomeAssis
 sys.modules["homeassistant.core"].Context = lambda **kwargs: kwargs
 sys.modules["homeassistant.core"].callback = lambda function: function
 sys.modules["homeassistant.exceptions"].HomeAssistantError = type("HomeAssistantError", (Exception,), {})
+sys.modules["homeassistant.exceptions"].ServiceValidationError = type("ServiceValidationError", (sys.modules["homeassistant.exceptions"].HomeAssistantError,), {})
 sys.modules["homeassistant.helpers.storage"].Store = lambda *args: None
 sys.modules["homeassistant.helpers.dispatcher"].async_dispatcher_send = lambda *args: None
 sys.modules["homeassistant.helpers.dispatcher"].async_dispatcher_connect = lambda *args: lambda: None
