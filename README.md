@@ -238,3 +238,6 @@ and ambiguous one-shot requests are never replayed by FanControl.
 The morning Exercise automation now uses Joe's arrival alone at either exercise
 location during 06:00–09:00, avoiding delayed car GPS. Configuration changes and
 routine snapshots never wake vehicles. HA 0.8.0 must be deployed before Apple 0.7.0.
+
+HA 0.8.0 was deployed and verified on October 24, 2026; see
+[deployment, validation and rollback evidence](DEPLOYMENT-0.8.0.md).
