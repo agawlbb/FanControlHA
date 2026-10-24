@@ -223,7 +223,7 @@ async def run(hass, runtime, op):
             while now_ms() < op["issued"] + DELIVERY_SECONDS * 1000:
                 if not await valid(hass, runtime, op):
                     raise asyncio.CancelledError
-                if action == "wake" and online(hass, p) or sent and matches(hass, op):
+                if action == "wake" and online(hass, p) or (sent or not one_shot) and matches(hass, op):
                     await finish(hass, runtime, op, "complete")
                     return
                 op["status"], op["stage"] = "waiting", "readiness"

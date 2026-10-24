@@ -122,8 +122,29 @@ async def main():
             from homeassistant.helpers import device_registry as dr
             device = dr.async_get(hass).async_get_device_by_identifier(("fan_control", apple_id), entry.entry_id)
             assert device.name == "Joes Ultra 4" and device.model == "Apple Watch", device
+            # Durable operation storage/reload against real HA; the desired state
+            # already holds, so the worker must complete without a physical call.
+            import time
+            from custom_components.fan_control import vehicle_operations as vo
+            runtime = hass.data["fan_control"]
+            body = {"action":"operation_submit", "operation_id":"12345678-1234-1234-1234-123456789abc",
+                    "issued_at_ms":int(time.time()*1000), "panel_id":"bedroom",
+                    "panel_config":configuration(manager.watches[apple_id])["devices"][0]["panel"], "command":"turn_off"}
+            async with runtime["lock"]:
+                assert vo.handle(hass, runtime, apple_id, manager.watches[apple_id], body)["operation_status"] == "pending"
+                await vo.persist(runtime)
+                op = runtime["vehicle_operations"][(apple_id, body["operation_id"])]
+                op["gate"].set()
+            await op["task"]
+            assert op["status"] == "complete"
+            saved = await runtime["operation_store"].async_load()
+            assert saved["operations"][0]["status"] == "complete"
             assert await hass.config_entries.async_unload(entry.entry_id)
-            print("Real Home Assistant load, pairing/options flow, selector, actions, and unload passed.")
+            assert await hass.config_entries.async_setup(entry.entry_id)
+            restored = hass.data["fan_control"]["vehicle_operations"][(apple_id, body["operation_id"])]
+            assert restored["status"] == "complete"
+            assert await hass.config_entries.async_unload(entry.entry_id)
+            print("Real HA load, pairing/options, durable operation storage/reload, selector and unload passed.")
         finally:
             await hass.async_stop()
 
