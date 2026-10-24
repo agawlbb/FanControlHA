@@ -29,6 +29,12 @@ revokes both. Revision-check preference writes and keep selection independent of
 swipe order. Configuration, snapshots, push and diagnostics never wake vehicles.
 Explicit settled visible watch entry and a user-tapped vehicle command may request or join one bounded wake attempt. Passive updates and command retries never initiate additional wakes. Apple command operations expire after 180 seconds plus a 15-second read-only confirmation grace period; expected delays do not trigger one-minute alerts.
 
+All new Apple commands use durable HA-owned operations: persist before acceptance,
+continue independently of watch navigation, and restore after restart within the
+original deadline. Persist one-shot dispatch boundaries before service calls;
+never replay ambiguous horn/cover/script/scene actions. The watch owns durable
+handoff until HA accepts; no preflight reads are required for command submission.
+Fan speed requests debounce for one second on HA, so wrist-down cannot lose drafts.
 Preserve at-most-once one-shot dispatch and bounded Stop continuation. Completed
 Stop selects a uniquely matching Driving panel once, without physical commands;
 duplicate polls cannot overwrite later manual selection. Local music Stop confirms

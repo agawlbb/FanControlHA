@@ -106,16 +106,18 @@ def test_offline_vehicle_hides_cached_fields_and_blocks_controls(status):
     for action in ("climate_on", "climate_off", "leave"):
         with pytest.raises(ValueError): panel_command(hass, panel, action)
 
-def test_online_vehicle_requires_valid_fields_without_timestamp_advancement():
+def test_online_vehicle_controls_are_independent_of_unrelated_fields():
     hass, _, _, states = with_panel()
     states["binary_sensor.example_online"] = SimpleNamespace(state="on", attributes={})
     panel = validate_panel(VEHICLE)
     assert panel_state(hass, panel)["vehicle_ready"]
     states["climate.example_car"].state = "invalid"
-    assert not panel_state(hass, panel)["vehicle_ready"]
+    assert panel_state(hass, panel)["vehicle_ready"]
+    assert not panel_state(hass, panel)["climate_available"]
     states["climate.example_car"].state = "off"
     states["sensor.example_battery"].state = "unknown"
-    assert not panel_state(hass, panel)["vehicle_ready"]
+    assert panel_state(hass, panel)["vehicle_ready"]
+    assert panel_state(hass, panel)["climate_available"]
 
 def test_wake_is_explicit_role_scoped_and_unknown_button_state_is_normal():
     hass, _, _, states = with_panel()

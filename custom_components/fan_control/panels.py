@@ -65,6 +65,7 @@ def configuration(watch):
         result["entity"] = "panel." + find_panel(watch, watch["active_panel"])["id"]
     if watch.get("platform") == "watch_os":
         result["vehicle_operations_version"] = 1
+        result["command_operations_version"] = 1
         result["companion_settings"] = watch.get("companion_settings", {"order": [], "headset": "Joseph's Buds2 Pro"})
     return result
 
@@ -87,7 +88,7 @@ def panel_state(hass, panel):
         except (ValueError, TypeError):
             pass
     climate = hass.states.get(panel["climate_entity"])
-    available = climate is not None and climate.state not in ("unknown", "unavailable")
+    available = climate is not None and climate.state in (("off", "heat", "cool", "heat_cool", "auto", "dry", "fan_only") if panel["climate_entity"].startswith("climate.") else ("on", "off"))
     on = available and climate.state != "off"
     if climate and panel["climate_entity"].startswith("climate."):
         # HA's explicit TURN_OFF (128) and TURN_ON (256) capabilities.
@@ -102,9 +103,9 @@ def panel_state(hass, panel):
         valid_climate = climate is not None and climate.state in (
             ("off", "heat", "cool", "heat_cool", "auto", "dry", "fan_only")
             if panel["climate_entity"].startswith("climate.") else ("on", "off"))
-        ready = online and percentage is not None and valid_climate
+        ready = online
         result.update(vehicle_ready=ready, vehicle_online=online)
-        if not ready:
+        if not online:
             result.update(battery=None, climate_on=False, climate_available=False, script_available=False)
     return result
 

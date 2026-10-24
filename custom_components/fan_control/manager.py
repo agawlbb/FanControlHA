@@ -66,7 +66,8 @@ class Manager:
     def authenticate(self, packet):
         self.prune()
         aad(packet)
-        if abs(self.clock() - packet["timestamp"]) > REQUEST_WINDOW:
+        age = self.clock() - packet["timestamp"]
+        if age < -REQUEST_WINDOW or age > 180:
             raise ValueError("Watch clock is out of sync")
         watch = self.watches.get(packet["watch_id"])
         nonce_key = packet["watch_id"] + ":" + packet["nonce"]
@@ -84,5 +85,8 @@ class Manager:
             raise ValueError("Companion action not permitted")
         if not isinstance(body, dict):
             raise ValueError("Invalid request")
-        self.nonces[nonce_key] = self.clock() + REQUEST_WINDOW * 2
+        # Only durable, bounded absolute intents may wait in an OS background upload.
+        if age > REQUEST_WINDOW and (credential != "watch" or body.get("action") != "operation_submit"):
+            raise ValueError("Watch clock is out of sync")
+        self.nonces[nonce_key] = self.clock() + 360
         return watch, body

@@ -36,7 +36,10 @@ async def async_setup_entry(hass, entry):
     manager = Manager(saved.get("watches", {}), nonces=saved.get("nonces", {}))
     runtime = {"manager": manager, "store": store, "lock": asyncio.Lock(), "attempts": {}, "entry": entry,
                "push_settings": saved.get("push_settings", {})}
+    runtime["operation_store"] = Store(hass, 1, DOMAIN + "_operations")
     hass.data[DOMAIN] = runtime
+    from .vehicle_operations import restore
+    await restore(hass, runtime, await runtime["operation_store"].async_load())
     from .push import PushCoordinator
     from homeassistant.helpers.dispatcher import async_dispatcher_connect
     from homeassistant.core import callback
@@ -90,6 +93,7 @@ async def async_unload_entry(hass, entry):
     hass.services.async_remove(DOMAIN, "set_active_panel")
     runtime = hass.data.pop(DOMAIN, None)
     if runtime:
+        runtime["unloading"] = True
         if runtime.get("push"):
             await runtime["push"].close()
         tasks = [op.get("task") for op in runtime.get("exercise_operations", {}).values() if op.get("task") is not None]
@@ -112,6 +116,7 @@ async def save(runtime):
 
 async def async_remove_entry(hass, entry):
     await Store(hass, 1, DOMAIN).async_remove()
+    await Store(hass, 1, DOMAIN + "_operations").async_remove()
 
 
 async def async_remove_config_entry_device(hass, entry, device_entry):
@@ -203,6 +208,16 @@ class PairView(HomeAssistantView):
             return response({"error": "Invalid or expired pairing"}, 400)
 
 
+async def legacy_service(hass, runtime, domain, service, data, owner):
+    # Authorization and command data were captured under the lock. Release it only
+    # across the external service call; never re-resolve selection after waiting.
+    runtime["lock"].release()
+    try:
+        return await hass.services.async_call(domain, service, data, blocking=True, context=Context(user_id=owner))
+    finally:
+        await runtime["lock"].acquire()
+
+
 class WatchView(HomeAssistantView):
     url = "/api/fan_control/watch/request"
     name = "api:fan_control:watch:request"
@@ -239,9 +254,14 @@ class WatchView(HomeAssistantView):
                         await save(runtime)
                         async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
                     result = configuration(watch)
-                elif action in ("vehicle_submit", "vehicle_status", "vehicle_cancel"):
+                elif action in ("vehicle_submit", "vehicle_status", "vehicle_cancel", "operation_submit", "operation_status", "operation_cancel"):
                     from .vehicle_operations import handle
                     result = handle(self.hass, runtime, packet["watch_id"], watch, body)
+                    from .vehicle_operations import persist
+                    await persist(runtime)
+                    op = runtime.get("vehicle_operations", {}).get((packet["watch_id"], body["operation_id"]))
+                    if op is not None and op.get("gate") is not None:
+                        op["gate"].set()
                 elif action == "push_register":
                     if watch.get("platform") != "watch_os":
                         raise ValueError("Apple Watch required")
@@ -300,7 +320,7 @@ class WatchView(HomeAssistantView):
                     else:
                         if action == "panel_command":
                             domain, service, data = panel_command(self.hass, panel, body.get("command"))
-                            await self.hass.services.async_call(domain, service, data, blocking=True, context=Context(user_id=owner.id))
+                            await legacy_service(self.hass, runtime, domain, service, data, owner.id)
                         if (action == "panel_state" and panel.get("type") == "exercise"
                                 and body.get("music_mode") == "local" and watch.get("platform") == "watch_os"):
                             from .exercise import exercise_state
@@ -313,7 +333,7 @@ class WatchView(HomeAssistantView):
                         raise ValueError("Device not approved")
                     if action == "command":
                         domain, service, data = command(entity, body.get("command"))
-                        await self.hass.services.async_call(domain, service, data, blocking=True, context=Context(user_id=owner.id))
+                        await legacy_service(self.hass, runtime, domain, service, data, owner.id)
                     state = self.hass.states.get(entity)
                     result = {"entity_id": entity, "state": state.state if state else "unavailable", "attributes": {}}
                     if state:

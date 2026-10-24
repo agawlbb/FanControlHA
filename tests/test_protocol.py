@@ -83,3 +83,11 @@ def test_addresses_and_device_limits():
     assert devices(["fan.example", "light.example", "script.example"])
     for values in ([], ["fan.example"] * 2, ["lock.example"], [f"fan.example{i}" for i in range(17)]):
         with pytest.raises(ValueError): devices(values)
+
+def test_only_durable_watch_submission_may_arrive_after_normal_request_window(keys):
+    manager = Manager(); created = session(manager, keys); wid = manager.approve(created["code"], CONFIG)
+    secret = manager.watches[wid]["secret"]
+    old = int(time.time()) - 90
+    manager.authenticate(packet(wid, secret, {"action":"operation_submit"}, old))
+    with pytest.raises(ValueError): manager.authenticate(packet(wid, secret, {"action":"command"}, old))
+    with pytest.raises(ValueError): manager.authenticate(packet(wid, secret, {"action":"operation_submit"}, int(time.time()) - 181))

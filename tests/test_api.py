@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -21,7 +22,7 @@ def request(body, headers=None):
 
 def runtime():
     manager = Manager(); keys = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    created = session(manager, keys); watch_id = manager.approve(created["code"], CONFIG)
+    created = session(manager, keys); watch_id = manager.approve(created["code"], copy.deepcopy(CONFIG))
     store = SimpleNamespace(async_save=AsyncMock())
     data = {"manager": manager, "store": store, "lock": asyncio.Lock(), "attempts": {}}
     state = SimpleNamespace(state="on", attributes={"percentage": 66, "supported_features": 1, "private_attribute": "hidden"})
