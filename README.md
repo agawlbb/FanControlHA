@@ -1,3 +1,11 @@
+## Current release - HA 0.9.0 / Apple 0.8.0 (17)
+
+HA 0.9.0 is deployed and Apple 0.8.0 (17) is available to the existing Internal
+TestFlight group. All Apple HA commands use durable server-owned operations;
+watch navigation does not cancel accepted delivery. Existing pairings are preserved.
+See [command delivery](COMMAND-OPERATIONS.md) and
+[deployment/rollback evidence](DEPLOYMENT-0.9.0.md). Physical watch/car checks remain.
+
 ## Apple companion — 0.7.0
 
 The iPhone uses a separate revocable observation/preferences key issued by its
