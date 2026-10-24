@@ -20,6 +20,52 @@ without specific approval. Back up before deletion/history rewrite, exclude igno
 credentials/runtime/signing material, preserve release tags, and use exact-SHA
 force-with-lease for authorized rewrites. Never purge recovery archives.
 
+## Required design for future commands
+
+Every new or changed Apple watch HA action must use the shared durable operation
+pipeline, including generic devices and new panel types. First-tap completion is
+the design goal for valid, authorized targets; ordinary wake and transient delivery
+delays must recover without another watch tap. Follow
+[COMMAND-OPERATIONS.md](COMMAND-OPERATIONS.md) and the watch repository's
+`COMMAND-DELIVERY.md`; do not add a synchronous watch-dependent command path.
+
+- Validate the captured watch/owner/credential, target roles and absolute intent.
+  Persist the operation before acknowledging acceptance or starting physical work.
+  The same ID and payload return the same operation; reject changed payloads and
+  stale/conflicting intents. Selection and unrelated configuration edits must not
+  redirect or block a still-valid approved target.
+- After durable acceptance, HA owns readiness, bounded wake, delivery, retry and
+  confirmation independently of watch connectivity, navigation and polling. Save
+  enough state to recover after HA restart within the original deadline. Preserve
+  explicit cancellation (including cancellation arriving before submission),
+  supersession and credential/role revocation across recovery.
+- Classify every command as a retryable desired state or an at-most-once action.
+  Persist the dispatch boundary before calling one-shot services. Never replay an
+  ambiguous cover, horn, script, scene or equivalent action after a lost response
+  or restart. Preserve shared wake ownership and fan-speed debounce across both
+  cancellation and restart. Service/provider waits must not hold the global lock
+  and prevent other commands from being accepted.
+- Keep durable queue acceptance, dispatch acknowledgment and observed completion
+  distinct in API results. Confirm desired states only from available matching
+  observations; scripts/scenes and similar actions acknowledge dispatch unless
+  separately configured completion evidence exists. Vehicle state cannot confirm
+  independent music playback. Report ambiguous outcomes as unconfirmed.
+- Use the shared 180-second delivery deadline plus 15-second read-only grace;
+  retries and duplicate requests must not extend it. Expected wake, retry, rate-
+  limit and temporary provider delays stay silent. Reconcile final evidence before
+  failure notifications; avoid duplicate/stale alerts and never promote timeout,
+  cancellation or unknown state into success. Do not add passive/background wakes.
+
+For each new action, add meaningful regression coverage for durable acceptance,
+lost responses and duplicate IDs, retryable delays, observed confirmation,
+unavailable/mismatched evidence, expiry, explicit cancellation, supersession,
+target/revocation changes, restart recovery and one-shot ambiguity. Exercise its
+watch surfaces too, including immediate navigation/wrist-down and stale callbacks.
+Document required API capabilities, compatible app/integration versions and
+remaining physical checks. Do not claim guaranteed exactly-once physical completion
+without target-side support. Deployment and physical validation still require their
+existing separate authorization.
+
 ## Integration invariants
 
 Keep approval, credentials, entities, panel roles and operations scoped to the
