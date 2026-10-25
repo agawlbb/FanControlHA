@@ -39,3 +39,7 @@ separate. Generic final failure alerts, fresh vehicle observations and bounded
 timing diagnostics accompany the durable command pipeline. Ordinary controls
 have no separate status messages. Physical watch/car behavior, cellular delivery,
 background scheduling and actual notification receipt require paired-device checks.
+
+Apple 0.9.0 (18) is VALID and IN_BETA_TESTING for the existing Internal group;
+build ID `59d77956-c358-4b1a-b0d4-1c0ce47b933f`. Signing, upload and processing:
+https://github.com/agawlbb/coffey-table-recipes/actions/runs/40242439379
