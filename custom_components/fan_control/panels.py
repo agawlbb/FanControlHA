@@ -65,7 +65,7 @@ def configuration(watch):
         result["entity"] = "panel." + find_panel(watch, watch["active_panel"])["id"]
     if watch.get("platform") == "watch_os":
         result["vehicle_operations_version"] = 1
-        result["command_operations_version"] = 1
+        result["command_operations_version"] = 2
         result["companion_settings"] = watch.get("companion_settings", {"order": [], "headset": "Joseph's Buds2 Pro"})
     return result
 

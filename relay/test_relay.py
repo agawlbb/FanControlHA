@@ -98,6 +98,22 @@ class RelayTests(unittest.TestCase):
             self.assertFalse(evidence["watch_delivery_confirmed"])
         self.assertEqual(rejected["apns_reason"], "BadDeviceToken")
 
+    def test_outcome_payloads_and_schema_use_separate_watch_route(self):
+        operation = "12345678-1234-4234-a234-123456789abc"
+        body = {"action":"outcome","watch_id":"synthetic.commands","operation_id":operation,"status":"failed","update_id":operation}
+        self.assertEqual(self.post(body)[0],404)
+        self.assertEqual(self.post({**body,"watch_id":"synthetic"})[0],400)
+        self.assertEqual(self.post({**body,"status":"pending"})[0],400)
+        self.assertEqual(self.post({**body,"title":"arbitrary"})[0],400)
+        functions=(SOURCE/"public"/"index.php").read_text().split("\ntry {",1)[0]
+        script=self.home/"outcome-test.php"
+        script.write_text(functions+'\necho json_encode([json_decode(outcome_payload($argv[1],"failed"),true),json_decode(outcome_payload($argv[1],"complete"),true)]);')
+        failed,complete=json.loads(subprocess.check_output([PHP,str(script),operation],text=True))
+        self.assertIn("alert",failed["aps"])
+        self.assertNotIn("alert",complete["aps"])
+        self.assertEqual(complete["aps"]["content-available"],1)
+        self.assertEqual(failed["fancontrol"],{"operation_id":operation})
+
     def test_get_is_static_and_post_fails_closed_without_config(self):
         with urllib.request.urlopen(self.url) as result:
             value = json.load(result)

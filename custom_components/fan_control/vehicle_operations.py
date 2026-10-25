@@ -29,10 +29,61 @@ def now_ms():
 
 def snapshot(hass, op):
     state = observed(hass, op["panel"])
-    return {**state, "operation_id": op["id"], "operation_status": op["status"],
+    return {**state, "observed_at_ms": now_ms(), "operation_id": op["id"], "operation_status": op["status"],
             "issued_at_ms": op["issued"], "deadline_ms": op["issued"] + DELIVERY_SECONDS * 1000,
             "final_deadline_ms": op["issued"] + (DELIVERY_SECONDS + FINAL_SECONDS) * 1000,
-            "stage": op["stage"], "reason": op.get("reason", ""), "steps": list(op["steps"])}
+            "stage": op["stage"], "reason": op.get("reason", ""), "steps": list(op["steps"]),
+            "timing": dict(op.get("timing", {})), "events": list(op.get("events", [])),
+            "outcome_alerts": bool(hass.data.get(DOMAIN, {}).get("push_settings", {}).get("enabled") and
+                hass.data.get(DOMAIN, {}).get("manager").watches.get(op["watch_id"], {}).get("command_push_registration"))
+                if hass.data.get(DOMAIN, {}).get("manager") else False}
+
+
+def event(op, phase, **fields):
+    """Bounded correlation data only; never credentials, URLs, or request bodies."""
+    stamp = now_ms()
+    op.setdefault("timing", {}).setdefault(phase + "_ms", stamp)
+    history = op.setdefault("events", [])
+    if not history or history[-1]["phase"] != phase:
+        history.append({"phase": phase, "at_ms": stamp, **fields})
+        del history[:-40]
+
+
+def queue_outcome(hass, runtime, op):
+    if op["command"] == "wake" or op["status"] not in ("complete", "accepted", "failed", "unconfirmed"):
+        return
+    key = (op["watch_id"], op["id"])
+    tasks = runtime.setdefault("operation_notifications", {})
+    if op.get("notified_status") == op["status"] or key in tasks:
+        return
+    async def deliver():
+        try:
+            for delay in (0, 2, 5, 15):
+                if delay:
+                    await asyncio.sleep(delay)
+                if not await valid(hass, runtime, op) or now_ms() > op["issued"] + 600000:
+                    return
+                latest = runtime.get("vehicle_latest", {}).get((op["watch_id"], op["panel"]["id"]))
+                if latest is not None and latest is not op and latest["issued"] >= op["issued"]:
+                    return
+                push = runtime.get("push")
+                if push is None:
+                    return
+                try:
+                    result = await push.command_outcome(op)
+                    op["notification_result"] = result
+                    if push.status(result) == 202:
+                        op["notified_status"] = op["status"]
+                        event(op, "notification_accepted")
+                        await persist(runtime)
+                        return
+                except Exception:
+                    op["notification_result"] = {"http_status": 0}
+            event(op, "notification_unconfirmed")
+            await persist(runtime)
+        finally:
+            tasks.pop(key, None)
+    tasks[key] = asyncio.create_task(deliver())
 
 
 def configured_target(watch, panel):
@@ -41,9 +92,36 @@ def configured_target(watch, panel):
     return next((p for p in watch.get("panels", []) if p.get("id") == panel["id"]), None)
 
 
+def fresh(state):
+    if state is None or state.state in ("unknown", "unavailable"):
+        return False
+    stamp = getattr(state, "last_reported", None) or getattr(state, "last_updated", None)
+    # HA State always supplies a datetime. Test doubles and legacy providers can omit it.
+    return stamp is None or -5000 <= now_ms() - int(stamp.timestamp() * 1000) <= 120000
+
+
+def same_roles(left, right):
+    def roles(panel):
+        return {k: v for k, v in panel.items() if k in ("id", "type", "entity") or k.endswith("_entity") and not k.startswith("spotify_")}
+    return right is not None and roles(left) == roles(right)
+
+
 def observed(hass, panel):
     if panel.get("type") != "device":
-        return panel_state(hass, panel)
+        result = panel_state(hass, panel)
+        if panel.get("wake_entity"):
+            ready = online(hass, panel)
+            climate_fresh = ready and fresh(hass.states.get(panel.get("climate_entity", "")))
+            result["vehicle_ready"] = ready
+            result["observation_fresh"] = climate_fresh
+            if not climate_fresh:
+                result.update(climate_on=False, climate_available=False, climate_off_available=False)
+            if not ready:
+                result.update(battery=None, trunk_state="unknown", locked=False)
+        else:
+            entity = panel.get("fan_entity") or panel.get("climate_entity")
+            result["observation_fresh"] = fresh(hass.states.get(entity)) if entity else False
+        return result
     state = hass.states.get(panel["entity"])
     return {"state": state.state if state else "unavailable", "attributes": {
         k: state.attributes[k] for k in ("percentage", "supported_features") if k in state.attributes} if state else {}}
@@ -85,11 +163,12 @@ async def restore(hass, runtime, saved):
             op["task"] = asyncio.create_task(run(hass, runtime, op))
         else:
             op["task"] = asyncio.create_task(asyncio.sleep(0))
+            queue_outcome(hass, runtime, op)
 
 
 def online(hass, panel):
     state = hass.states.get(panel["awake_entity"])
-    return state is not None and state.state == "on"
+    return state is not None and state.state == "on" and fresh(state)
 
 
 def matches(hass, op):
@@ -111,13 +190,13 @@ def matches(hass, op):
         return True
     if action.startswith("climate_"):
         climate = hass.states.get(p["climate_entity"])
-        return climate is not None and climate.state in ("off", "on", "heat", "cool", "heat_cool", "auto", "dry", "fan_only") and (climate.state != "off") == (action == "climate_on")
+        return fresh(climate) and climate.state in ("off", "on", "heat", "cool", "heat_cool", "auto", "dry", "fan_only") and (climate.state != "off") == (action == "climate_on")
     if action in ("start_exercise", "stop_exercise"):
         lock = hass.states.get(p["lock_entity"])
-        if lock is None or lock.state != ("locked" if action == "start_exercise" else "unlocked"):
+        if not fresh(lock) or lock.state != ("locked" if action == "start_exercise" else "unlocked"):
             return False
         climate = hass.states.get(p["climate_entity"])
-        return action == "start_exercise" or climate is not None and climate.state in ("heat", "cool", "heat_cool", "auto", "dry", "fan_only")
+        return action == "start_exercise" or fresh(climate) and climate.state in ("heat", "cool", "heat_cool", "auto", "dry", "fan_only")
     return False
 
 
@@ -127,7 +206,7 @@ async def valid(hass, runtime, op):
         watch = runtime["manager"].watches.get(op["watch_id"])
         if (hass.data.get(DOMAIN) is not runtime or op["status"] == "cancelled" or watch is None
                 or watch.get("owner_id") != op["owner"] or watch.get("secret") != op["secret"]
-                or configured_target(watch, op["panel"]) != op["panel"]):
+                or not same_roles(op["panel"], configured_target(watch, op["panel"]))):
             return False
         owner = await hass.auth.async_get_user(op["owner"])
         return owner is not None and owner.is_active and owner.is_admin
@@ -148,13 +227,22 @@ async def service(hass, runtime, op, domain, name, data):
         raise asyncio.CancelledError
     if data.get("entity_id") == op["panel"].get("wake_entity"):
         op["wake_call_started"] = True
+    event(op, "service_start", service=name)
+    if data.get("entity_id") != op["panel"].get("wake_entity"):
+        event(op, "command_dispatch", service=name)
+    if name == "press" and data.get("entity_id") == op["panel"].get("wake_entity"):
+        event(op, "wake_dispatch")
     await hass.services.async_call(domain, name, data, blocking=True, context=Context(user_id=op["owner"]))
+    event(op, "service_return", service=name)
+    if data.get("entity_id") != op["panel"].get("wake_entity"):
+        event(op, "command_return", service=name)
 
 
 async def wake(hass, runtime, op):
     """A single shared in-flight wake per owner and vehicle; never replay on timeout."""
     p = op["panel"]
     if online(hass, p):
+        event(op, "online_observed")
         return
     key = (op["owner"], p["wake_entity"], p["awake_entity"])
     wakes = runtime.setdefault("vehicle_wakes", {})
@@ -192,6 +280,8 @@ async def wake(hass, runtime, op):
         if not await valid(hass, runtime, op):
             raise asyncio.CancelledError
         await asyncio.sleep(1)
+    if online(hass, p):
+        event(op, "online_observed")
 
 
 async def finish(hass, runtime, op, status, reason=""):
@@ -200,7 +290,9 @@ async def finish(hass, runtime, op, status, reason=""):
         return
     op["status"], op["reason"] = status, reason
     op["finished_ms"] = now_ms()
+    event(op, "terminal", status=status)
     await persist(runtime)
+    queue_outcome(hass, runtime, op)
     if status == "complete" and op["command"] == "stop_exercise":
         async with runtime["lock"]:
             # Reuse the same once-only, unique vehicle selection path as legacy Stop.
@@ -260,7 +352,7 @@ async def run(hass, runtime, op):
                             commands.append(("climate", "turn_on", {"entity_id": p["climate_entity"]}))
                         if action == "stop_exercise" and not op.get("temperature_requested") and climate is not None:
                             unit = climate_unit(hass, climate.attributes)
-                            target = 63.0 if unit == "°F" else (63 - 32) * 5 / 9 if unit == "°C" else None
+                            target = 63.0 if unit == "Ã‚°F" else (63 - 32) * 5 / 9 if unit == "Ã‚°C" else None
                             if target is not None:
                                 commands.append(("climate", "set_temperature", {"entity_id": p["climate_entity"], "temperature": target}))
                     elif action != "wake":
@@ -328,7 +420,7 @@ async def run(hass, runtime, op):
     await finish(hass, runtime, op, "unconfirmed", op.get("reason") or "Vehicle outcome unavailable after three minutes")
 
 
-def handle(hass, runtime, watch_id, watch, body):
+def handle(hass, runtime, watch_id, watch, body, *, received_ms=None):
     """Called under runtime lock; only registers tasks or returns their current state."""
     if watch.get("platform") != "watch_os":
         raise ValueError("Apple Watch required")
@@ -345,7 +437,7 @@ def handle(hass, runtime, watch_id, watch, body):
                 runtime.setdefault("operation_cancellations", {})[(watch_id, identity)] = now_ms()
             return {"operation_id": identity, "operation_status": "unknown"}
         if (op["secret"] != watch["secret"] or op["owner"] != watch["owner_id"]
-                or configured_target(watch, op["panel"]) != op["panel"]):
+                or not same_roles(op["panel"], configured_target(watch, op["panel"]))):
             op["status"] = "cancelled"
             op["task"].cancel()
             return {"operation_id": identity, "operation_status": "cancelled"}
@@ -377,10 +469,10 @@ def handle(hass, runtime, watch_id, watch, body):
         p = find_panel(watch, body.get("panel_id"))
         config = {k: v for k, v in p.items() if not k.startswith("spotify_")}
         allowed = COMMANDS.get(p["type"], set()) if p["type"] != "fan" else {"turn_on", "turn_off", *[f"speed{i}" for i in range(1, 7)]}
-        if body.get("panel_config") not in (p, config) or body.get("command") not in allowed:
+        if not isinstance(body.get("panel_config"), dict) or not same_roles(body["panel_config"], p) or body.get("command") not in allowed:
             raise ValueError("Command target changed")
     if op is not None:
-        if op["panel"] != p or op["command"] != body["command"] or op["issued"] != issued:
+        if not same_roles(op["panel"], p) or op["command"] != body["command"] or op["issued"] != issued:
             raise ValueError("Operation changed")
         return snapshot(hass, op)
     now = now_ms()
@@ -409,7 +501,9 @@ def handle(hass, runtime, watch_id, watch, body):
     op = {"id": identity, "issued": issued, "watch_id": watch_id, "owner": watch["owner_id"],
           "secret": watch["secret"], "panel": copy.deepcopy(p), "command": body["command"],
           "status": "pending", "stage": "accepted", "steps": [],
-          "not_before": min(issued + 1000, max(issued, body.get("not_before_ms", issued))) }
+          "not_before": min(issued + 1000, max(issued, body.get("not_before_ms", issued))),
+          "timing": {"watch_issued_ms": issued, "received_ms": now if received_ms is None else received_ms}, "events": [] }
+    event(op, "registered")
     operations[key] = op
     if body["command"] != "wake":
         latest[target] = op

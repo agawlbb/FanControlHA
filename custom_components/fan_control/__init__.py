@@ -53,6 +53,9 @@ async def async_setup_entry(hass, entry):
     entry.async_on_unload(async_dispatcher_connect(hass, f"{DOMAIN}_updated", push_updated))
     entry.async_on_unload(hass.bus.async_listen("state_changed", push_state_changed))
     push.updated()
+    from .vehicle_operations import queue_outcome
+    for op in runtime.get("vehicle_operations", {}).values():
+        queue_outcome(hass, runtime, op)
 
     async def set_active(call):
         async with runtime["lock"]:
@@ -99,6 +102,7 @@ async def async_unload_entry(hass, entry):
         tasks = [op.get("task") for op in runtime.get("exercise_operations", {}).values() if op.get("task") is not None]
         tasks.extend(runtime.get("music_tasks", {}).values())
         tasks.extend(runtime.get("exercise_checks", {}).values())
+        tasks.extend(runtime.get("operation_notifications", {}).values())
         tasks.extend(op["task"] for op in runtime.get("vehicle_operations", {}).values() if not op["task"].done())
         tasks.extend(attempt["task"] for attempt in runtime.get("vehicle_wakes", {}).values() if not attempt["task"].done())
         runtime.get("exercise_operations", {}).clear()
@@ -230,6 +234,7 @@ class WatchView(HomeAssistantView):
         runtime = self.hass.data.get(DOMAIN)
         if runtime is None:
             return response({"error": "Integration unavailable"}, 503)
+        received_ms = int(time.time() * 1000)
         try:
             packet = await read_body(request)
             async with runtime["lock"]:
@@ -256,19 +261,33 @@ class WatchView(HomeAssistantView):
                     result = configuration(watch)
                 elif action in ("vehicle_submit", "vehicle_status", "vehicle_cancel", "operation_submit", "operation_status", "operation_cancel"):
                     from .vehicle_operations import handle
-                    result = handle(self.hass, runtime, packet["watch_id"], watch, body)
-                    from .vehicle_operations import persist
+                    result = handle(self.hass, runtime, packet["watch_id"], watch, body, received_ms=received_ms)
+                    from .vehicle_operations import persist, event, snapshot
                     await persist(runtime)
                     op = runtime.get("vehicle_operations", {}).get((packet["watch_id"], body["operation_id"]))
-                    if op is not None and op.get("gate") is not None:
-                        op["gate"].set()
+                    if op is not None:
+                        event(op, "accepted")
+                        result = snapshot(self.hass, op)
+                        if op.get("gate") is not None:
+                            op["gate"].set()
                 elif action == "push_register":
                     if watch.get("platform") != "watch_os":
                         raise ValueError("Apple Watch required")
                     from .push import registration
-                    watch["push_registration"] = registration(body)
+                    if body.get("purpose") not in (None, "command_outcomes"):
+                        raise ValueError("Invalid push purpose")
+                    field = "command_push_registration" if body.get("purpose") == "command_outcomes" else "push_registration"
+                    target_registration = registration(body)
+                    # Re-registering watch alerts must never steal the phone's snapshot route.
+                    if field != "push_registration" or watch.get(field, {}).get("destination") != "phone":
+                        watch[field] = target_registration
                     await save(runtime)
                     async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
+                    if field == "command_push_registration":
+                        from .vehicle_operations import queue_outcome
+                        for op in runtime.get("vehicle_operations", {}).values():
+                            if op["watch_id"] == packet["watch_id"]:
+                                queue_outcome(self.hass, runtime, op)
                     result = {"status": "registered_with_ha"}
                 elif action == "push_receipts":
                     if watch.get("platform") != "watch_os":

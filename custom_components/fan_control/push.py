@@ -147,6 +147,27 @@ class PushCoordinator:
                         evidence[key] = value
             return evidence
 
+    async def command_outcome(self, op):
+        """Dedicated watch destination; phone snapshot registration cannot replace it."""
+        import uuid
+        watch = self.runtime["manager"].watches.get(op["watch_id"])
+        if not self.settings.get("enabled") or watch is None or not watch.get("command_push_registration"):
+            return {"http_status": 404, "error": "not_registered"}
+        target = dict(watch["command_push_registration"])
+        identity = op["watch_id"] + ".commands"
+        result = await self.send({"action": "register", "watch_id": identity, **target, "destination": "watch"})
+        if self.status(result) != 200:
+            return result
+        latest = self.runtime.get("vehicle_latest", {}).get((op["watch_id"], op["panel"]["id"]))
+        if (latest is not None and latest is not op and latest["issued"] >= op["issued"] or
+                self.runtime["manager"].watches.get(op["watch_id"]) is not watch or
+                watch.get("command_push_registration") != target or watch.get("secret") != op["secret"] or
+                watch.get("owner_id") != op["owner"] or op["status"] == "cancelled"):
+            return {"http_status": 409, "error": "superseded"}
+        return await self.send({"action": "outcome", "watch_id": identity,
+            "operation_id": op["id"], "status": op["status"],
+            "update_id": str(uuid.uuid5(uuid.NAMESPACE_URL, op["id"] + ":" + op["status"]))})
+
     async def persist(self):
         from . import save
         async with self.runtime["lock"]:

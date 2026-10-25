@@ -46,8 +46,10 @@ delays must recover without another watch tap. Follow
   cancellation and restart. Service/provider waits must not hold the global lock
   and prevent other commands from being accepted.
 - Keep durable queue acceptance, dispatch acknowledgment and observed completion
-  distinct in API results. Confirm desired states only from available matching
-  observations; scripts/scenes and similar actions acknowledge dispatch unless
+  distinct in API results. ALL watch command controls turn their requested state
+  teal on authenticated durable HA ownership; this is not physical confirmation.
+  HA must still confirm desired states from fresh matching observations and send
+  final failures to the dedicated watch outcome route. Scripts/scenes acknowledge dispatch unless
   separately configured completion evidence exists. Vehicle state cannot confirm
   independent music playback. Report ambiguous outcomes as unconfirmed.
 - Use the shared 180-second delivery deadline plus 15-second read-only grace;
@@ -93,3 +95,28 @@ out of Git and backups of tracked source. Use synthetic test credentials. Preser
 all integration and relay regression tests. Run pytest and Python compilation for
 code changes; PHP checks require a supported runtime. Do not deploy to HA/hosting
 or send physical commands as validation without explicit authorization.
+
+## Required entry, notification and timing contract
+
+Visible settled vehicle entry submits a single role-scoped wake and performs a
+bounded readiness/state refresh. Passive snapshots and cosmetic panel changes must
+not cancel it, and passive/offscreen updates must never initiate a wake. Treat
+stale online/climate observations as unknown; use HA last_reported/last_updated
+freshness, not cached values, for wake suppression and outcome confirmation. This
+is HA evidence, not independent proof of physical state.
+
+All user commands, including Work Morning climate, require terminal outcome alert
+handling independent of watch screen lifetime. The command APNs destination is
+watch-only and separate from phone snapshot registration. Keep normal delays
+silent; deduplicate retries by operation/outcome and suppress stale/superseded
+failures. Entry-only wake trouble is diagnostic, not an extra command alert.
+Preserve bounded retry/recovery and record whether APNs accepted a notification;
+never equate APNs acceptance with watch receipt. Notification permission and relay
+availability remain prerequisites. The relay's new outcome API, HA capability 2
+and watch changes must be validated/deployed together only after release approval.
+
+Keep server timing/events bounded and correlated by operation ID: request arrival,
+authenticated registration, durable acceptance, wake dispatch/online observation,
+command dispatch/return, terminal result and notification result. Do not accept
+client-supplied server timestamps. Duplicate requests preserve the original times;
+no credentials, tokens, URLs or full request bodies belong in these diagnostics.

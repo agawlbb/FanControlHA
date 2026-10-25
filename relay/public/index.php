@@ -14,6 +14,15 @@ function b64(string $s): string { return rtrim(strtr(base64_encode($s), '+/', '-
 function refresh_payload(string $update, string $watch): string {
     return json_encode(['aps'=>['content-available'=>1], 'fancontrol'=>['refresh'=>true,'update_id'=>$update,'watch_id'=>$watch]], JSON_THROW_ON_ERROR);
 }
+function outcome_payload(string $operation, string $status): string {
+    $failed = in_array($status, ['failed','unconfirmed'], true);
+    $aps = $failed
+        ? ['alert'=>['title'=>$status === 'failed' ? 'Fan Control request failed' : 'Fan Control not confirmed',
+                     'body'=>$status === 'failed' ? 'Home Assistant could not complete your request.' : 'Home Assistant could not confirm the requested outcome.'],
+           'sound'=>'default', 'thread-id'=>'fancontrol-'.$operation]
+        : ['content-available'=>1];
+    return json_encode(['aps'=>$aps, 'fancontrol'=>['operation_id'=>$operation]], JSON_THROW_ON_ERROR);
+}
 function apns_evidence(string $update, int $status, string|false $result): array {
     $reason = is_string($result) ? (json_decode($result, true)['reason'] ?? '') : '';
     if (!is_string($reason) || !preg_match('/^[A-Za-z0-9]{0,80}$/D', $reason)) { $reason = 'Unknown'; }
@@ -77,11 +86,12 @@ try {
     $action = $body['action'] ?? '';
     $watch = $body['watch_id'] ?? '';
     if (!is_string($watch) || !preg_match('/^[A-Za-z0-9._-]{1,128}$/D', $watch) ||
-        !in_array($action, ['register','unregister','refresh'], true)) { reply(400, ['error'=>'invalid_request']); }
+        !in_array($action, ['register','unregister','refresh','outcome'], true)) { reply(400, ['error'=>'invalid_request']); }
     $allowed = match ($action) {
         'register' => ['action','watch_id','device_token','environment','destination'],
         'unregister' => ['action','watch_id'],
         'refresh' => ['action','watch_id','reason','update_id'],
+        'outcome' => ['action','watch_id','operation_id','status','update_id'],
     };
     if (array_diff(array_keys($body), $allowed)) { reply(400, ['error'=>'unknown_fields']); }
     if ($action === 'register' && (!is_string($body['device_token'] ?? null) ||
@@ -96,6 +106,14 @@ try {
     if ($action === 'refresh' && isset($body['update_id']) &&
         (!is_string($body['update_id']) || !preg_match('/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/D', $body['update_id']))) {
         reply(400, ['error'=>'invalid_update_id']);
+    }
+    if ($action === 'outcome' && (!str_ends_with($watch, '.commands') ||
+        !is_string($body['operation_id'] ?? null) ||
+        !preg_match('/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/D', $body['operation_id']) ||
+        !in_array($body['status'] ?? '', ['complete','accepted','failed','unconfirmed'], true) ||
+        !is_string($body['update_id'] ?? null) ||
+        !preg_match('/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/D', $body['update_id']))) {
+        reply(400, ['error'=>'invalid_outcome']);
     }
     umask(0077);
     $db = new PDO('sqlite:'.$private.'/relay.sqlite', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
@@ -128,11 +146,20 @@ try {
     $query->execute([$installation,$watch]);
     $registration = $query->fetch(PDO::FETCH_ASSOC);
     if (!$registration) { reply(404, ['error'=>'watch_not_registered']); }
+    if ($action === 'outcome' && $registration['destination'] !== 'watch') { reply(400, ['error'=>'invalid_destination']); }
     if (!function_exists('curl_init') || !(curl_version()['features'] & CURL_VERSION_HTTP2)) {
         reply(503, ['error'=>'http2_unavailable']);
     }
     $hex = bin2hex(random_bytes(16));
     $update = $body['update_id'] ?? substr($hex,0,8).'-'.substr($hex,8,4).'-4'.substr($hex,13,3).'-a'.substr($hex,17,3).'-'.substr($hex,20);
+    if ($action === 'outcome') {
+        $prior = $db->prepare('SELECT status,apns_status,apns_reason FROM attempts WHERE installation=? AND watch=? AND update_id=?');
+        $prior->execute([$installation,$watch,$update]);
+        $previous = $prior->fetch(PDO::FETCH_ASSOC);
+        if ($previous && $previous['status'] === 'accepted_by_apns') {
+            reply(202, ['status'=>'accepted_by_apns','apns_id'=>$update,'apns_status'=>200,'watch_delivery_confirmed'=>false]);
+        }
+    }
     $db->prepare('INSERT OR IGNORE INTO attempts VALUES (?,?,?,?,?,?,?)')->execute([$installation,$watch,$update,time(),'attempted',null,null]);
     $db->prepare('DELETE FROM attempts WHERE installation=? AND rowid NOT IN (SELECT rowid FROM attempts WHERE installation=? ORDER BY rowid DESC LIMIT 1000)')->execute([$installation,$installation]);
     // Reuse a provider token to avoid APNs TooManyProviderTokenUpdates errors.
@@ -153,9 +180,11 @@ try {
         CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
         CURLOPT_HTTPHEADER=>['authorization: bearer '.$cached['jwt'],'apns-topic: '.($registration['destination'] === 'phone' ? 'dev.fancontrol.watch' : $config['topic']),
             'apns-id: '.$update,
-            'apns-push-type: background','apns-priority: 5','apns-expiration: '.(time()+300),
-            'apns-collapse-id: fancontrol-refresh','content-type: application/json'],
-        CURLOPT_POSTFIELDS=>refresh_payload($update,$watch)]);
+            'apns-push-type: '.($action === 'outcome' && in_array($body['status'], ['failed','unconfirmed'], true) ? 'alert' : 'background'),
+            'apns-priority: '.($action === 'outcome' && in_array($body['status'], ['failed','unconfirmed'], true) ? '10' : '5'),
+            'apns-expiration: '.(time()+300),
+            'apns-collapse-id: '.($action === 'outcome' ? 'fc-'.$body['operation_id'] : 'fancontrol-refresh'),'content-type: application/json'],
+        CURLOPT_POSTFIELDS=>$action === 'outcome' ? outcome_payload($body['operation_id'],$body['status']) : refresh_payload($update,$watch)]);
     $result = curl_exec($curl);
     $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
     curl_close($curl);
