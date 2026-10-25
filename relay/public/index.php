@@ -19,7 +19,7 @@ function outcome_payload(string $operation, string $status): string {
     $aps = $failed
         ? ['alert'=>['title'=>$status === 'failed' ? 'Fan Control request failed' : 'Fan Control not confirmed',
                      'body'=>$status === 'failed' ? 'Home Assistant could not complete your request.' : 'Home Assistant could not confirm the requested outcome.'],
-           'sound'=>'default', 'thread-id'=>'fancontrol-'.$operation]
+           'sound'=>'default', 'content-available'=>1, 'thread-id'=>'fancontrol-'.$operation]
         : ['content-available'=>1];
     return json_encode(['aps'=>$aps, 'fancontrol'=>['operation_id'=>$operation]], JSON_THROW_ON_ERROR);
 }

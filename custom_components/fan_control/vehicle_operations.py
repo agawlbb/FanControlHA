@@ -123,7 +123,7 @@ def observed(hass, panel):
             result["observation_fresh"] = fresh(hass.states.get(entity)) if entity else False
         return result
     state = hass.states.get(panel["entity"])
-    return {"state": state.state if state else "unavailable", "attributes": {
+    return {"state": state.state if state else "unavailable", "observation_fresh": fresh(state), "attributes": {
         k: state.attributes[k] for k in ("percentage", "supported_features") if k in state.attributes} if state else {}}
 
 

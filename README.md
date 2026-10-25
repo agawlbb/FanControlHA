@@ -1,3 +1,8 @@
+**Unreleased source:** HA 0.10.0 and relay outcome API corrections require the
+unreleased Apple 0.9.0 (18) client for full feedback/notification behavior.
+Nothing in this update has been deployed. See
+[the implementation record](UNRELEASED-CORRECTIONS.md).
+
 ## Current release - HA 0.9.0 / Apple 0.8.0 (17)
 
 HA 0.9.0 is deployed and Apple 0.8.0 (17) is available to the existing Internal
