@@ -1,15 +1,13 @@
-**Unreleased source:** HA 0.10.0 and relay outcome API corrections require the
-unreleased Apple 0.9.0 (18) client for full feedback/notification behavior.
-Nothing in this update has been deployed. See
-[the implementation record](UNRELEASED-CORRECTIONS.md).
+# Current release - HA 0.10.0 / Apple 0.9.0 (18)
 
-## Current release - HA 0.9.0 / Apple 0.8.0 (17)
-
-HA 0.9.0 is deployed and Apple 0.8.0 (17) is available to the existing Internal
-TestFlight group. All Apple HA commands use durable server-owned operations;
+HA 0.10.0 and the command outcome relay are deployed. Apple 0.9.0 (18) is the
+matching client. All Apple HA commands use durable server-owned operations;
 watch navigation does not cancel accepted delivery. Existing pairings are preserved.
-See [command delivery](COMMAND-OPERATIONS.md) and
-[deployment/rollback evidence](DEPLOYMENT-0.9.0.md). Physical watch/car checks remain.
+Requested controls turn teal when HA accepts ownership, with physical execution
+tracked separately. Ordinary command controls have no separate status messages.
+See [command delivery](COMMAND-OPERATIONS.md),
+[implementation details](UNRELEASED-CORRECTIONS.md) and
+[deployment/rollback evidence](DEPLOYMENT-0.10.0.md). Physical watch/car checks remain.
 
 ## Apple companion — 0.7.0
 

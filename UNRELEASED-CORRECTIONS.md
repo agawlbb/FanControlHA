@@ -1,8 +1,9 @@
-# Unreleased HA/relay corrections - October 25, 2026
+# Released HA/relay corrections - October 25, 2026
 
-Source version HA 0.10.0; command_operations_version 2. Live HA remains 0.9.0,
-and the installed/TestFlight app remains 0.8.0 (17). No deployment, live service
-command, relay publication or release is authorized by this implementation.
+HA 0.10.0 and command_operations_version 2 are deployed with the outcome relay
+following explicit build/release authorization. Apple 0.9.0 (18) is the matching
+client. See [deployment and rollback evidence](DEPLOYMENT-0.10.0.md).
+This filename is retained to preserve existing links to the implementation record.
 
 The shared operation pipeline now returns authoritative request-arrival,
 registration, acceptance, wake/online, dispatch/return and terminal timestamps,
@@ -34,14 +35,14 @@ be guaranteed during disconnection; local missing-handoff fallback uses honest
 not-confirmed wording and 30 seconds of notification grace after the 195-second
 operation deadline. Normal accepted wake/retry delays remain silent.
 
-A later explicitly approved rollout must update **HA, relay and watch together**.
+The approved rollout coordinates **HA, relay and watch together**.
 Preserve HA pairing/operation stores and relay private config/key/SQLite data;
 never put those files in Git. Validate the new relay before depending on HA outcome
 alerts. No new Apple key/topic is introduced: command alerts use the existing watch
 topic, with a registration separate from phone snapshot delivery. Watch notification
 permission, registration, relay connectivity and OS delivery remain prerequisites.
 
-253 local synthetic regression tests and Python compilation passed, including
+257 local synthetic/deployment regression tests and Python compilation passed, including
 closed-watch climate continuation, shared wake, stale reports, server-owned timing,
 notification isolation/deduplication/supersession and strict relay outcome payloads.
 Physical watch/cellular/car, notification permission, offline delivery and OS
