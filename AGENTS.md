@@ -5,14 +5,16 @@
 The canonical repositories are `C:/Users/mailb/StudioProjects/FanControl/apple-watch`
 (agawlbb/FanControlWatch) and `C:/Users/mailb/StudioProjects/FanControl/ha-integration`
 (agawlbb/FanControlHA). Work only in the repository assigned to the task.
-The connected laptop owner is the chat "FanControl owner" (01a15b0b-d82d-7dd2-b5ce-4e3f9bf236b8);
-coordinate handoff before another chat writes. Verify current heads and local
+The primary repository owner is the cloud chat "FanControl cloud owner".
+Ownership was transferred to the cloud by the user on October 27, 2026 and remains
+with the cloud when the laptop reconnects. Coordinate handoff with the cloud owner
+before another chat writes. Verify current heads and local
 changes before editing; preserve unexpected work. Labelled recovery copies remain
 archives and must not become active checkouts.
 
 When explicitly asked to work offline, use a named `codex/` branch in the same
-repository. On laptop return, the owner reviews, merges, validates and synchronizes
-that branch. Delete it only after its work is preserved. Complete work with commits
+repository. The cloud owner reviews, merges, validates and synchronizes
+that branch; laptop-owner review or merging is not required. Delete it only after its work is preserved. Complete work with commits
 and pushes; verify clean local state and matching GitHub heads before reporting done.
 Inspect push workflows first. Do not trigger releases, deployment, device installation
 or distributable builds without authorization. Never change branch protections
