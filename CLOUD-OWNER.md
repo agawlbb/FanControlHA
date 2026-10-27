@@ -11,7 +11,9 @@ Cloud checkouts cannot establish whether the laptop has unpushed work.
 The cloud owner reviews, merges, validates and synchronizes the cloud branches.
 Laptop-owner review or merging is not required. On laptop return, preserve
 unexpected local work when synchronizing its checkout. Delete a branch only after preserving
-its work. Keep the existing canonical checkout and recovery archive rules.
+its work. The canonical working copies are `/workspace/FanControlWatch` and
+`/workspace/FanControlHA` in the cloud workspace. Laptop checkouts are secondary.
+Preserve existing recovery archives.
 
 ## Builds
 
