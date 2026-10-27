@@ -1,13 +1,16 @@
-# Cloud development while the laptop is offline
+# Cloud repository ownership
 
 Cloud development is authorized for the Apple app and shared Home Assistant
 integration, subject to each repository's AGENTS.md.
 
+The primary repository owner is the cloud chat "FanControl cloud owner".
+Ownership remains with the cloud when the laptop reconnects.
 Use `codex/cloud-owner-2026-10-27` for this cloud work. Inspect workflow triggers
 before pushing, commit and push completed changes, and verify the remote head.
 Cloud checkouts cannot establish whether the laptop has unpushed work.
-On laptop return, its owner reviews, merges, validates and synchronizes the cloud
-branches, preserving unexpected local work. Delete a branch only after preserving
+The cloud owner reviews, merges, validates and synchronizes the cloud branches.
+Laptop-owner review or merging is not required. On laptop return, preserve
+unexpected local work when synchronizing its checkout. Delete a branch only after preserving
 its work. Keep the existing canonical checkout and recovery archive rules.
 
 ## Builds
