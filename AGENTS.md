@@ -2,9 +2,13 @@
 
 ## Repository ownership and offline work
 
-The canonical repositories are `C:/Users/mailb/StudioProjects/FanControl/apple-watch`
-(agawlbb/FanControlWatch) and `C:/Users/mailb/StudioProjects/FanControl/ha-integration`
-(agawlbb/FanControlHA). Work only in the repository assigned to the task.
+The canonical working copies are `/workspace/FanControlWatch`
+(agawlbb/FanControlWatch) and `/workspace/FanControlHA`
+(agawlbb/FanControlHA) in the cloud workspace. GitHub preserves the shared source
+and history. Laptop checkouts are secondary copies, not canonical working copies;
+they are not required for cloud modifications or builds. On laptop reconnection,
+preserve any unpushed local work before synchronizing from GitHub.
+Work only in the repository assigned to the task.
 The primary repository owner is the cloud chat "FanControl cloud owner".
 Ownership was transferred to the cloud by the user on October 27, 2026 and remains
 with the cloud when the laptop reconnects. Coordinate handoff with the cloud owner
