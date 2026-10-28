@@ -1,26 +1,15 @@
 # Home Assistant integration development
 
-## Repository ownership and offline work
+## GitHub, branches and workspaces
 
-The canonical working copies are `/workspace/FanControlWatch`
-(agawlbb/FanControlWatch) and `/workspace/FanControlHA`
-(agawlbb/FanControlHA) in the cloud workspace. GitHub preserves the shared source
-and history. Laptop checkouts are secondary copies, not canonical working copies;
-they are not required for cloud modifications or builds. On laptop reconnection,
-preserve any unpushed local work before synchronizing from GitHub.
-Work only in the repository assigned to the task.
-The primary repository owner is the cloud chat "FanControl cloud owner".
-Ownership was transferred to the cloud by the user on October 27, 2026 and remains
-with the cloud when the laptop reconnects. Coordinate handoff with the cloud owner
-before another chat writes. Verify current heads and local
-changes before editing; preserve unexpected work. Labelled recovery copies remain
-archives and must not become active checkouts.
+- GitHub `agawlbb/FanControlHA`, default branch `main`, is the canonical copy of accepted code and history. Laptop, VPS and cloud checkouts are working copies. The default branch is for integration of completed work, never a working branch for a task.
+- Prefer the VPS for most development. Development may also take place on the laptop or another authorized environment, including emulator, webview and device testing. Independent tasks use separate, clearly named temporary branches and separate working directories (Git worktrees or clones). Do not share a writable checkout between concurrent tasks. There is no permanent designated chat owner or owner-chat approval requirement.
+- Before editing, read applicable instructions and inspect current branches, worktrees, local edits, live GitHub heads and active writers/builds. Preserve unrelated and unpushed work; a clean tree alone does not prove inactivity. Coordinate overlapping changes and shared resources with the tasks involved.
+- Start each task branch from the latest canonical default and record its purpose and base commit. To move the same task between machines, commit and push that branch, then fetch and continue it on the other machine after coordinating the handoff. Never overwrite another task's work or use recovery archives as active workspaces.
+- Before merging, fetch and integrate the latest canonical default into the task branch, resolve conflicts without discarding others' changes, review the diff and rerun relevant checks against the integrated result. Serialize merges into the default branch and recheck its live head before publishing. Respect existing protections; do not bypass them or rewrite published history.
+- Commit and push completed work to the existing GitHub origin, merge accepted work into `main`, and verify the remote commit and a clean task working tree before reporting completion. Report blockers or unsynchronized work explicitly. Inspect push triggers before every push; GitHub publication does not itself authorize builds, releases, deployment or installation.
+- Temporary task branches must be removed both locally and remotely once their purpose is fulfilled and their changes are merged into the canonical default branch, or their work is explicitly abandoned by the user or the person responsible for that task. Verify the merge or abandonment decision first; preserve commit history, required recovery evidence and recoverable unique work before deletion. Stale or paused work is not abandoned. Never discard unmerged work without that decision, delete another task's branches, or purge recovery archives as routine cleanup.
 
-Use `main` for ongoing cloud work. Do not create additional branches unless the
-user requests one. The cloud owner validates and synchronizes changes;
-laptop-owner review or merging is not required. Preserve useful work before
-deleting any existing branch. Complete work with commits
-and pushes; verify clean local state and matching GitHub heads before reporting done.
 Inspect push workflows first. Do not trigger releases, deployment, device installation
 or distributable builds without authorization. Never change branch protections
 without specific approval. Back up before deletion/history rewrite, exclude ignored
