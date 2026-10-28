@@ -16,9 +16,10 @@ before another chat writes. Verify current heads and local
 changes before editing; preserve unexpected work. Labelled recovery copies remain
 archives and must not become active checkouts.
 
-When explicitly asked to work offline, use a named `codex/` branch in the same
-repository. The cloud owner reviews, merges, validates and synchronizes
-that branch; laptop-owner review or merging is not required. Delete it only after its work is preserved. Complete work with commits
+Use `main` for ongoing cloud work. Do not create additional branches unless the
+user requests one. The cloud owner validates and synchronizes changes;
+laptop-owner review or merging is not required. Preserve useful work before
+deleting any existing branch. Complete work with commits
 and pushes; verify clean local state and matching GitHub heads before reporting done.
 Inspect push workflows first. Do not trigger releases, deployment, device installation
 or distributable builds without authorization. Never change branch protections
