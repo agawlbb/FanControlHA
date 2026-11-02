@@ -336,7 +336,9 @@ async def run(hass, runtime, op):
             while now_ms() < op["issued"] + DELIVERY_SECONDS * 1000:
                 if not await valid(hass, runtime, op):
                     raise asyncio.CancelledError
-                if action == "wake" and online(hass, p) or (sent or not one_shot) and matches(hass, op):
+                # Stop must attempt its temperature request even if unlock/climate already match.
+                if (action == "wake" and online(hass, p) or (sent or not one_shot) and matches(hass, op)) and (
+                        action != "stop_exercise" or op.get("temperature_requested")):
                     await finish(hass, runtime, op, "complete")
                     return
                 op["status"], op["stage"] = "waiting", "readiness"
@@ -352,7 +354,7 @@ async def run(hass, runtime, op):
                             commands.append(("climate", "turn_on", {"entity_id": p["climate_entity"]}))
                         if action == "stop_exercise" and not op.get("temperature_requested") and climate is not None:
                             unit = climate_unit(hass, climate.attributes)
-                            target = 63.0 if unit == "Ã‚°F" else (63 - 32) * 5 / 9 if unit == "Ã‚°C" else None
+                            target = 63.0 if unit == "°F" else (63 - 32) * 5 / 9 if unit == "°C" else None
                             if target is not None:
                                 commands.append(("climate", "set_temperature", {"entity_id": p["climate_entity"], "temperature": target}))
                     elif action != "wake":

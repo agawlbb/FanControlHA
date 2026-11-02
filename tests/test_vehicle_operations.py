@@ -51,6 +51,43 @@ async def complete(hass, watch_id, body):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("unit,target", [("°F", 63.0), ("°C", (63 - 32) * 5 / 9)])
+@pytest.mark.parametrize("already_ready", [False, True])
+@pytest.mark.parametrize("unit_from_config", [False, True])
+async def test_stop_requests_temperature_even_when_unlocked_and_climate_on(
+        monkeypatch, unit, target, already_ready, unit_from_config):
+    hass, watch, wid, states, clock, body = setup(monkeypatch, command="stop_exercise")
+    climate = states[PANEL["climate_entity"]]
+    climate.attributes["temperature"] = 70 if unit == "°F" else 21
+    climate.attributes["temperature_unit"] = unit
+    if unit_from_config:
+        del climate.attributes["temperature_unit"]
+        hass.config = SimpleNamespace(units=SimpleNamespace(temperature_unit=unit))
+    states[PANEL["lock_entity"]].state = "unlocked" if already_ready else "locked"
+    climate.state = "heat_cool" if already_ready else "off"
+
+    async def deliver(domain, name, data, **kwargs):
+        if name == "unlock":
+            states[PANEL["lock_entity"]].state = "unlocked"
+        elif name == "turn_on":
+            climate.state = "heat_cool"
+        elif name == "set_temperature":
+            climate.attributes["temperature"] = data["temperature"]
+
+    hass.services.async_call.side_effect = deliver
+    vo.handle(hass, hass.data["fan_control"], wid, watch, body)
+    op = await complete(hass, wid, body)
+    assert op["status"] == "complete"
+    calls = [c for c in hass.services.async_call.await_args_list if c.args[0] != "persistent_notification"]
+    assert [c.args[1] for c in calls] == (["set_temperature"] if already_ready else
+                                         ["unlock", "turn_on", "set_temperature"])
+    assert calls[-1].args[2] == {"entity_id": PANEL["climate_entity"], "temperature": pytest.approx(target)}
+    # A duplicate handoff must not dispatch the temperature again.
+    vo.handle(hass, hass.data["fan_control"], wid, watch, body)
+    assert len([c for c in hass.services.async_call.await_args_list if c.args[1] == "set_temperature"]) == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("delay", [30, 60, 90])
 async def test_slow_wake_is_silent_and_first_tap_locks(monkeypatch, delay):
     hass, watch, wid, states, clock, body = setup(monkeypatch, asleep=True)
