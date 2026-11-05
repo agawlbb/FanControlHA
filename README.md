@@ -34,8 +34,8 @@ Requires this integration, the updated relay entry, and a Fan Control iPhone bui
 containing the Notifications settings section. Link the phone to the selected watch,
 enable the relay in Fan Control's HA options, then open Fan Control on iPhone and use
 **Settings → Notifications → Enable notifications**. If permission was denied, use
-**Notification settings** to change it in iOS. These source changes do not deploy the
-relay, install an app, reload the integration or restart HA; activation is deferred.
+**Notification settings** to change it in iOS. FanControl 0.10.0 (24) and HA 0.12.0
+are released/deployed; see [On Duty activation and deployment evidence](ON-DUTY.md).
 
 HA sends a visible APNs alert directly to Fan Control's iPhone topic
 `dev.fancontrol.watch`. It does not wait for background execution on either app.

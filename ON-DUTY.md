@@ -26,8 +26,8 @@ No relay changes or FlightSync changes are required.
 
 ## Prepared automations
 
-The following were created in HA, disabled pending installation of the matching
-app and integration. The existing Work Morning and other automations are unchanged.
+The following are configured and enabled in HA. The existing Work Morning and
+other automations are unchanged.
 
 - `automation.joe_watch_on_duty_tile`: On duty becomes on → select `on_duty`
   on `select.watch_tile_panel`.
@@ -45,8 +45,17 @@ Install the HA integration and matching iPhone/watch update through the existing
 release process. Under Fan Control → Manage watch panels, add On Duty with ID
 `on_duty`, city pair `sensor.joe_s_work_schedule_flight_airports` and departure
 `sensor.joe_s_work_schedule_flight_start`. Enable the two prepared automations.
-No release, deployment, restart, installation or test notification was performed
-as part of source implementation.
+Deployment completed November 5, 2026 from source
+`f4bff5e215f83e2912029cee9019c25d7f4bc96e`. All ten changed existing files
+matched the installed 0.11.0 source before copying. Eleven updated/new files
+read back exactly. HA configuration validation passed; one Core restart loaded
+0.12.0, verified through the integration manifest and new clear_messages action.
+The On Duty panel is configured with the entities above and both automations
+are enabled. Pairing and existing panels/selection were preserved. FanControl
+0.10.0 (24) is available to the existing Internal TestFlight group, Apple build
+`28b6c495-b6b1-4d38-a274-860da576692b`, VALID and IN_BETA_TESTING.
+No physical commands or synthetic flight notifications were sent as validation.
+User/device installation and physical checks remain.
 
 ## Validation
 
