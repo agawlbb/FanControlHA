@@ -126,6 +126,77 @@ class RelayTests(unittest.TestCase):
         finally:
             held.rename(self.config)
 
+    def test_automation_notification_validation_and_phone_destination(self):
+        update = "12345678-1234-4234-a234-123456789abc"
+        body = {"action":"notify", "watch_id":"alerts.notifications", "title":"Garage", "message":"Still open", "update_id":update}
+        self.assertEqual(self.post(body)[0],404)
+        for changes in ({"watch_id":"alerts.commands"}, {"message":" "}, {"message":"x"*1501},
+                        {"title":"😀"*51}, {"message":"bad\x00text"}, {"message":[]},
+                        {"update_id":"invalid"}, {"url":"https://example.invalid"}):
+            self.assertEqual(self.post({**body, **changes})[0],400)
+        self.assertEqual(self.post({"action":"register", "watch_id":body["watch_id"],
+                                   "device_token":"a"*64, "environment":"sandbox"})[0],200)
+        self.assertEqual(self.post(body)[0],400) # A watch registration cannot receive phone alerts.
+        self.post({"action":"unregister", "watch_id":body["watch_id"]})
+        functions = (SOURCE / "public" / "index.php").read_text().split("\ntry {",1)[0]
+        script = self.home / "notification-test.php"
+        script.write_text(functions + '\necho notification_payload($argv[1], "synthetic", "Garage 😀", "Still open\\nCheck the door");')
+        payload = json.loads(subprocess.check_output([PHP,str(script),update],text=True))
+        self.assertEqual(payload["aps"]["alert"], {"title":"Garage 😀", "body":"Still open\nCheck the door"})
+        self.assertEqual(payload["aps"]["sound"], "default")
+        self.assertNotIn("content-available", payload["aps"])
+        self.assertEqual(payload["fancontrol"], {"notification":True, "update_id":update, "watch_id":"synthetic"})
+
+    def test_automation_dispatch_uses_fancontrol_phone_topic_and_alert_headers(self):
+        # Run the actual request entry with cURL replaced by an in-process fake.
+        # Disable extensions except PDO/SQLite; this cannot reach APNs or any network.
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+        import base64
+        key = ec.generate_private_key(ec.SECP256R1())
+        key_file = self.home / "routing-synthetic.p8"
+        key_file.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+        self.config.write_text("<?php return ['enabled'=>true,'key_id'=>'SYNTHETIC','team_id'=>'SYNTHETIC','topic'=>'synthetic.watch.topic', 'key_file'=>" + json.dumps(str(key_file)) + ", 'installations'=>['one'=>['secret'=>'" + "x"*64 + "'],'two'=>['secret'=>'" + "y"*64 + "']]];")
+        identity = "routing.notifications"
+        self.assertEqual(self.post({"action":"register", "watch_id":identity, "device_token":"b"*64,
+                                   "environment":"sandbox", "destination":"phone"})[0],200)
+        update = "12345678-1234-4234-a234-123456789abc"
+        raw = json.dumps({"action":"notify", "watch_id":identity, "title":"Garage", "message":"Still open", "update_id":update}, separators=(",", ":")).encode()
+        timestamp, nonce = str(int(time.time())), secrets.token_hex(16)
+        signature = hmac.new(b"x"*64,timestamp.encode()+b"\n"+nonce.encode()+b"\n"+raw,hashlib.sha256).hexdigest()
+        source = (SOURCE / "public/index.php").read_text().replace("'php://input'", "__DIR__.'/routing-body.json'")
+        entry = self.home / "site/FanControl/routing-entry.php"
+        entry.write_text(source)
+        (entry.parent / "routing-body.json").write_bytes(raw)
+        capture = self.home / "capture.json"
+        fake = self.home / "routing.php"
+        fake.write_text("<?php\n" + "\n".join([
+            "define('"+name+"',"+str(i+1)+");" for i,name in enumerate((
+                "CURL_VERSION_HTTP2", "CURLOPT_POST", "CURLOPT_RETURNTRANSFER", "CURLOPT_HTTP_VERSION", "CURL_HTTP_VERSION_2_0",
+                "CURLOPT_CONNECTTIMEOUT", "CURLOPT_TIMEOUT", "CURLOPT_PROTOCOLS", "CURLPROTO_HTTPS", "CURLOPT_HTTPHEADER",
+                "CURLOPT_POSTFIELDS", "CURLINFO_RESPONSE_CODE"))]) + "\n" +
+            "function curl_version(){return ['features'=>CURL_VERSION_HTTP2];}\n" +
+            "function curl_init($url){return (object)['url'=>$url];}\n" +
+            "function curl_setopt_array($curl,$options){$curl->options=$options;}\n" +
+            "function curl_exec($curl){file_put_contents("+json.dumps(str(capture))+",json_encode(['url'=>$curl->url,'headers'=>$curl->options[CURLOPT_HTTPHEADER],'payload'=>json_decode($curl->options[CURLOPT_POSTFIELDS],true)]));return '';}\n" +
+            "function curl_getinfo($curl,$option){return 200;} function curl_close($curl){}\n" +
+            "$_SERVER=" + "json_decode(base64_decode('"+base64.b64encode(json.dumps({
+                "HTTPS":"on", "REQUEST_METHOD":"POST", "CONTENT_TYPE":"application/json", "HTTP_X_FANCONTROL_INSTALLATION":"one",
+                "HTTP_X_FANCONTROL_TIMESTAMP":timestamp,"HTTP_X_FANCONTROL_NONCE":nonce,"HTTP_X_FANCONTROL_SIGNATURE":signature}).encode()).decode()+"'),true);\n" +
+            "require "+json.dumps(str(entry))+";")
+        extension_dir = subprocess.check_output([PHP,"-r","echo ini_get('extension_dir');"],text=True).strip()
+        result = subprocess.check_output([PHP,"-n", "-d", "extension="+extension_dir+"/pdo.so",
+                                          "-d", "extension="+extension_dir+"/pdo_sqlite.so",str(fake)],text=True)
+        self.assertEqual(json.loads(result)["status"],"accepted_by_apns")
+        sent = json.loads(capture.read_text())
+        self.assertEqual(sent["url"],"https://api.sandbox.push.apple.com/3/device/"+"b"*64)
+        self.assertIn("apns-topic: dev.fancontrol.watch",sent["headers"])
+        self.assertIn("apns-push-type: alert",sent["headers"])
+        self.assertIn("apns-priority: 10",sent["headers"])
+        self.assertIn("apns-collapse-id: fc-"+update,sent["headers"])
+        self.assertEqual(sent["payload"]["fancontrol"]["watch_id"],"routing")
+        self.assertEqual(sent["payload"]["aps"]["alert"]["body"],"Still open")
+
     def test_jwt_signature_is_valid_es256(self):
         import base64
         from cryptography.hazmat.primitives import hashes, serialization

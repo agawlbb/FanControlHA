@@ -125,7 +125,7 @@ class PushCoordinator:
     async def send(self, body):
         from homeassistant.helpers.aiohttp_client import async_get_clientsession
         from aiohttp import ClientTimeout
-        raw = json.dumps(body, separators=(",", ":")).encode()
+        raw = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode()
         session = async_get_clientsession(self.hass)
         async with session.post(RELAY_URL, data=raw, headers=headers(self.settings, raw),
                                 allow_redirects=False, timeout=ClientTimeout(total=15)) as result:
@@ -146,6 +146,54 @@ class PushCoordinator:
                     if type(value) is int or isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_. -]{1,100}", value):
                         evidence[key] = value
             return evidence
+
+    async def notify_phone(self, watch_id, title, message):
+        """A visible alert, independent of app background execution and snapshots."""
+        import uuid
+        from homeassistant.exceptions import HomeAssistantError
+        from .notifications import notification_text
+        notification_text(title, 200)
+        notification_text(message, 1500)
+        watch = self.runtime["manager"].watches.get(watch_id)
+        settings = dict(self.settings)
+        if self.closed or self.runtime.get("unloading") or not settings.get("enabled"):
+            raise HomeAssistantError("Fan Control push relay is disabled")
+        if (watch is None or watch.get("platform") != "watch_os" or not watch.get("companion")
+                or watch.get("push_registration", {}).get("destination") != "phone"):
+            raise HomeAssistantError("Link the iPhone app and register it for notifications first")
+        target = dict(watch["push_registration"])
+        companion = dict(watch["companion"])
+        owner_id = watch["owner_id"]
+
+        def current():
+            return (not self.closed and not self.runtime.get("unloading") and self.settings == settings
+                    and self.runtime["manager"].watches.get(watch_id) is watch
+                    and watch.get("platform") == "watch_os" and watch.get("owner_id") == owner_id
+                    and watch.get("companion") == companion and watch.get("push_registration") == target)
+
+        owner = await self.hass.auth.async_get_user(owner_id)
+        if not current() or owner is None or not owner.is_active or not owner.is_admin:
+            raise HomeAssistantError("Notification recipient is no longer available")
+        # Separate identity prevents snapshots or command outcomes replacing this route.
+        identity = watch_id + ".notifications"
+        try:
+            result = await self.send({"action": "register", "watch_id": identity, **target})
+            if not current():
+                raise HomeAssistantError("Notification recipient changed before dispatch")
+            if self.status(result) != 200:
+                raise HomeAssistantError("Notification registration was not accepted by the relay")
+            owner = await self.hass.auth.async_get_user(owner_id)
+            if not current() or owner is None or not owner.is_active or not owner.is_admin:
+                raise HomeAssistantError("Notification recipient is no longer available")
+            result = await self.send({"action": "notify", "watch_id": identity,
+                                      "title": title, "message": message, "update_id": str(uuid.uuid4())})
+            if self.status(result) != 202:
+                raise HomeAssistantError("Notification was not accepted for delivery")
+        except HomeAssistantError:
+            raise
+        except Exception:
+            # Neither message contents nor relay secrets belong in HA errors/logs.
+            raise HomeAssistantError("Notification delivery is unknown; check connectivity before sending again") from None
 
     async def command_outcome(self, op):
         """Dedicated watch destination; phone snapshot registration cannot replace it."""

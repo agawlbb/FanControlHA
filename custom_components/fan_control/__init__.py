@@ -85,6 +85,8 @@ async def async_setup_entry(hass, entry):
             await save(runtime)
             async_dispatcher_send(hass, f"{DOMAIN}_updated")
     hass.services.async_register(DOMAIN, "set_active_panel", set_panel, schema=vol.Schema({vol.Required("watch_id"): str, vol.Required("panel_id"): str}))
+    from .notifications import register_service
+    register_service(hass, runtime)
     await hass.config_entries.async_forward_entry_setups(entry, ["select"])
     return True
 
@@ -94,6 +96,7 @@ async def async_unload_entry(hass, entry):
         return False
     hass.services.async_remove(DOMAIN, "set_active_device")
     hass.services.async_remove(DOMAIN, "set_active_panel")
+    hass.services.async_remove(DOMAIN, "send_notification")
     runtime = hass.data.pop(DOMAIN, None)
     if runtime:
         runtime["unloading"] = True

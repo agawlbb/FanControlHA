@@ -9,6 +9,48 @@ See [command delivery](COMMAND-OPERATIONS.md),
 [implementation details](UNRELEASED-CORRECTIONS.md) and
 [deployment/rollback evidence](DEPLOYMENT-0.10.0.md). Physical watch/car checks remain.
 
+## Automation notifications — 0.11.0
+
+Home Assistant automations and scripts can call **Fan Control: Send notification**
+(`fan_control.send_notification`). Select the Fan Control Apple Watch device whose
+linked **Fan Control iPhone app** should receive the alert, then enter a title and
+message. This does not use the Home Assistant Companion app or its notify services.
+
+```yaml
+action: fan_control.send_notification
+data:
+  device_id: YOUR_FAN_CONTROL_WATCH_DEVICE_ID
+  title: Garage still open
+  message: The garage has been open for ten minutes.
+```
+
+Use the action's Recipient picker to populate `device_id`; it is HA's device ID,
+not the watch's pairing ID. Title defaults to Fan Control (maximum 200 UTF-8 bytes);
+message is required (maximum 1500 UTF-8 bytes). Unicode and line breaks are supported.
+The action is available to administrators and automations. It sends one notification
+to the selected watch's linked phone, without changing selection or waking vehicles.
+
+Requires this integration, the updated relay entry, and a Fan Control iPhone build
+containing the Notifications settings section. Link the phone to the selected watch,
+enable the relay in Fan Control's HA options, then open Fan Control on iPhone and use
+**Settings → Notifications → Enable notifications**. If permission was denied, use
+**Notification settings** to change it in iOS. These source changes do not deploy the
+relay, install an app, reload the integration or restart HA; activation is deferred.
+
+HA sends a visible APNs alert directly to Fan Control's iPhone topic
+`dev.fancontrol.watch`. It does not wait for background execution on either app.
+Apple may display it on the watch instead, depending on device state, mirroring,
+Focus and notification settings. Successful action completion means APNs accepted
+the alert, not that it was received or read. Disabled relay, missing/revoked phone,
+inactive owner, registration rejection and delivery errors fail the HA action.
+Ambiguous delivery is not retried automatically, to avoid duplicate alerts.
+Each action invocation has its own alert identity so separate events do not coalesce.
+Existing watch-only command outcome notifications remain separate.
+
+Development task: `feature/automation-notifications`, based on canonical main
+`7824c7809e7f88a1876b0fa8ec880e1d70ed2205`. All tests use synthetic recipients;
+real iPhone/watch delivery and permission/routing checks remain release checks.
+
 ## Apple companion — 0.7.0
 
 The iPhone uses a separate revocable observation/preferences key issued by its

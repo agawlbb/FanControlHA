@@ -23,6 +23,16 @@ function outcome_payload(string $operation, string $status): string {
         : ['content-available'=>1];
     return json_encode(['aps'=>$aps, 'fancontrol'=>['operation_id'=>$operation]], JSON_THROW_ON_ERROR);
 }
+function notification_payload(string $update, string $watch, string $title, string $message): string {
+    return json_encode(['aps'=>['alert'=>['title'=>$title,'body'=>$message], 'sound'=>'default',
+                                'thread-id'=>'fancontrol-automations'],
+                        'fancontrol'=>['notification'=>true,'update_id'=>$update,'watch_id'=>$watch]],
+                       JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+}
+function valid_notification_text(mixed $text, int $limit): bool {
+    return is_string($text) && strlen($text) <= $limit && preg_match('/\\S/u', $text) === 1 &&
+        !preg_match('/[\\x00-\\x08\\x0b-\\x1f]/', $text);
+}
 function apns_evidence(string $update, int $status, string|false $result): array {
     $reason = is_string($result) ? (json_decode($result, true)['reason'] ?? '') : '';
     if (!is_string($reason) || !preg_match('/^[A-Za-z0-9]{0,80}$/D', $reason)) { $reason = 'Unknown'; }
@@ -86,12 +96,13 @@ try {
     $action = $body['action'] ?? '';
     $watch = $body['watch_id'] ?? '';
     if (!is_string($watch) || !preg_match('/^[A-Za-z0-9._-]{1,128}$/D', $watch) ||
-        !in_array($action, ['register','unregister','refresh','outcome'], true)) { reply(400, ['error'=>'invalid_request']); }
+        !in_array($action, ['register','unregister','refresh','outcome','notify'], true)) { reply(400, ['error'=>'invalid_request']); }
     $allowed = match ($action) {
         'register' => ['action','watch_id','device_token','environment','destination'],
         'unregister' => ['action','watch_id'],
         'refresh' => ['action','watch_id','reason','update_id'],
         'outcome' => ['action','watch_id','operation_id','status','update_id'],
+        'notify' => ['action','watch_id','title','message','update_id'],
     };
     if (array_diff(array_keys($body), $allowed)) { reply(400, ['error'=>'unknown_fields']); }
     if ($action === 'register' && (!is_string($body['device_token'] ?? null) ||
@@ -114,6 +125,13 @@ try {
         !is_string($body['update_id'] ?? null) ||
         !preg_match('/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/D', $body['update_id']))) {
         reply(400, ['error'=>'invalid_outcome']);
+    }
+    if ($action === 'notify' && (!str_ends_with($watch, '.notifications') ||
+        !valid_notification_text($body['title'] ?? null, 200) ||
+        !valid_notification_text($body['message'] ?? null, 1500) ||
+        !is_string($body['update_id'] ?? null) ||
+        !preg_match('/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/D', $body['update_id']))) {
+        reply(400, ['error'=>'invalid_notification']);
     }
     umask(0077);
     $db = new PDO('sqlite:'.$private.'/relay.sqlite', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
@@ -147,6 +165,7 @@ try {
     $registration = $query->fetch(PDO::FETCH_ASSOC);
     if (!$registration) { reply(404, ['error'=>'watch_not_registered']); }
     if ($action === 'outcome' && $registration['destination'] !== 'watch') { reply(400, ['error'=>'invalid_destination']); }
+    if ($action === 'notify' && $registration['destination'] !== 'phone') { reply(400, ['error'=>'invalid_destination']); }
     if (!function_exists('curl_init') || !(curl_version()['features'] & CURL_VERSION_HTTP2)) {
         reply(503, ['error'=>'http2_unavailable']);
     }
@@ -180,11 +199,15 @@ try {
         CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
         CURLOPT_HTTPHEADER=>['authorization: bearer '.$cached['jwt'],'apns-topic: '.($registration['destination'] === 'phone' ? 'dev.fancontrol.watch' : $config['topic']),
             'apns-id: '.$update,
-            'apns-push-type: '.($action === 'outcome' && in_array($body['status'], ['failed','unconfirmed'], true) ? 'alert' : 'background'),
-            'apns-priority: '.($action === 'outcome' && in_array($body['status'], ['failed','unconfirmed'], true) ? '10' : '5'),
+            'apns-push-type: '.($action === 'notify' || ($action === 'outcome' && in_array($body['status'], ['failed','unconfirmed'], true)) ? 'alert' : 'background'),
+            'apns-priority: '.($action === 'notify' || ($action === 'outcome' && in_array($body['status'], ['failed','unconfirmed'], true)) ? '10' : '5'),
             'apns-expiration: '.(time()+300),
-            'apns-collapse-id: '.($action === 'outcome' ? 'fc-'.$body['operation_id'] : 'fancontrol-refresh'),'content-type: application/json'],
-        CURLOPT_POSTFIELDS=>$action === 'outcome' ? outcome_payload($body['operation_id'],$body['status']) : refresh_payload($update,$watch)]);
+            'apns-collapse-id: '.($action === 'notify' ? 'fc-'.$update : ($action === 'outcome' ? 'fc-'.$body['operation_id'] : 'fancontrol-refresh')),'content-type: application/json'],
+        CURLOPT_POSTFIELDS=>match ($action) {
+            'notify' => notification_payload($update,substr($watch,0,-strlen('.notifications')),$body['title'],$body['message']),
+            'outcome' => outcome_payload($body['operation_id'],$body['status']),
+            default => refresh_payload($update,$watch),
+        }]);
     $result = curl_exec($curl);
     $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
     curl_close($curl);

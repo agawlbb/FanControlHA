@@ -36,3 +36,30 @@ set_active_panel:
       required: true
       selector:
         text:
+
+send_notification:
+  name: Send notification
+  description: Sends an alert to the selected Apple Watch's linked iPhone. Apple may present it on the watch. Success means APNs accepted delivery, not that it was received or read.
+  fields:
+    device_id:
+      name: Recipient
+      description: Select the Fan Control Apple Watch whose linked iPhone should receive the alert.
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: fan_control
+    title:
+      name: Title
+      description: Up to 200 UTF-8 bytes. Defaults to Fan Control.
+      example: Garage still open
+      selector:
+        text:
+    message:
+      name: Message
+      description: Up to 1500 UTF-8 bytes.
+      required: true
+      example: The garage has been open for ten minutes.
+      selector:
+        text:
+          multiline: true

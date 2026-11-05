@@ -87,3 +87,18 @@ Registration optionally includes destination=phone (default watch). Existing
 SQLite registrations migrate to destination=watch. The fixed phone topic is
 dev.fancontrol.watch; watch registrations retain the configured watch topic.
 Arbitrary client topics are rejected. Deploy this public entry with HA 0.7.0.
+
+## Automation alerts to Fan Control on iPhone
+
+The authenticated `notify` action accepts `watch_id` ending in `.notifications`,
+a UUID `update_id`, `title` (1–200 UTF-8 bytes) and `message` (1–1500 UTF-8 bytes).
+Blank text, unsupported fields and watch destinations are rejected. HA registers
+this separate identity with `destination=phone` and the Fan Control iPhone token
+before each invocation. The APNs topic is fixed to `dev.fancontrol.watch`; this is
+not the Home Assistant Companion app. The relay sends `apns-push-type: alert`,
+priority 10, default sound and a five-minute expiry. Each invocation uses a unique
+collapse ID, independent of refresh and watch command outcomes. No silent refresh
+or app execution is needed to display the alert. Notification contents are not
+stored in the relay database. A 202 response means APNs acceptance, not receipt.
+Deploy the updated public entry together with integration 0.11.0 when authorized;
+this feature does not require changes to private relay credentials or storage.
