@@ -125,6 +125,14 @@ async def test_admin_service_registration_and_device_scope(monkeypatch):
     args, kwargs = calls[0]
     assert args[1:3] == ("fan_control", "send_notification")
     assert kwargs["schema"] is SCHEMA
+    clear_handler = calls[1][0][3]
+    assert calls[1][0][2] == "clear_messages"
+    push.queue = __import__("unittest.mock", fromlist=["Mock"]).Mock()
+    watch["messages"] = [{"id": "one", "title": "Delay", "message": "Full text"}]
+    await clear_handler(SimpleNamespace(data={"device_id": "device"}))
+    assert watch["messages"] == []
+    push.queue.assert_called_once_with(wid, "configuration")
+    hass.data["fan_control"]["store"].async_save.assert_awaited()
     handler = args[3]
     await handler(SimpleNamespace(data=SCHEMA({"device_id": "device", "message": "Hello"})))
     push.notify_phone.assert_awaited_once_with(wid, "Fan Control", "Hello")

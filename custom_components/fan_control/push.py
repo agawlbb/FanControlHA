@@ -174,6 +174,15 @@ class PushCoordinator:
         owner = await self.hass.auth.async_get_user(owner_id)
         if not current() or owner is None or not owner.is_active or not owner.is_admin:
             raise HomeAssistantError("Notification recipient is no longer available")
+        # Keep the full message available to the linked iPhone after a banner is tapped.
+        notification_id = str(uuid.uuid4())
+        async with self.runtime["lock"]:
+            if not current():
+                raise HomeAssistantError("Notification recipient changed before saving")
+            watch.setdefault("messages", []).append({"id": notification_id, "title": title,
+                "message": message, "at_ms": int(time.time() * 1000)})
+            from . import save
+            await save(self.runtime)
         # Separate identity prevents snapshots or command outcomes replacing this route.
         identity = watch_id + ".notifications"
         try:
@@ -186,7 +195,7 @@ class PushCoordinator:
             if not current() or owner is None or not owner.is_active or not owner.is_admin:
                 raise HomeAssistantError("Notification recipient is no longer available")
             result = await self.send({"action": "notify", "watch_id": identity,
-                                      "title": title, "message": message, "update_id": str(uuid.uuid4())})
+                                      "title": title, "message": message, "update_id": notification_id})
             if self.status(result) != 202:
                 raise HomeAssistantError("Notification was not accepted for delivery")
         except HomeAssistantError:

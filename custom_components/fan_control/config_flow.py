@@ -172,11 +172,51 @@ class FanControlOptions(config_entries.OptionsFlow):
 
     async def async_step_panel_menu(self, user_input=None):
         watch = self.hass.data[DOMAIN]["manager"].watches[self.watch_id]
-        return self.async_show_menu(step_id="panel_menu", menu_options=(["add_fan"] if watch.get("platform") == "watch_os" else []) + ["add_panel", "add_exercise", "add_driving", "edit_panel", "remove_panel", "activate_panel"])
+        return self.async_show_menu(step_id="panel_menu", menu_options=(["add_fan", "add_on_duty"] if watch.get("platform") == "watch_os" else []) + ["add_panel", "add_exercise", "add_driving", "edit_panel", "remove_panel", "activate_panel"])
 
     async def async_step_add_panel(self, user_input=None):
         self.editing_panel = None
         return await self.async_step_panel()
+
+    async def async_step_add_on_duty(self, user_input=None):
+        self.editing_panel = None
+        return await self.async_step_on_duty()
+
+    async def async_step_on_duty(self, user_input=None):
+        runtime = self.hass.data[DOMAIN]
+        watch = runtime["manager"].watches[self.watch_id]
+        existing = next((p for p in watch.get("panels", []) if p["id"] == self.editing_panel), {})
+        errors = {}
+        if user_input is not None:
+            try:
+                panel = validate_panel({**user_input, "type": "on_duty"})
+                if watch.get("platform") != "watch_os":
+                    raise ValueError("Apple Watch required")
+                if self.editing_panel and panel["id"] != self.editing_panel:
+                    raise ValueError("Keep panel ID")
+                if any(self.hass.states.get(panel[role]) is None for role in ("city_pair_entity", "departure_entity")):
+                    raise ValueError("Entity not found")
+                async with runtime["lock"]:
+                    if not self.editing_panel and any(p["id"] == panel["id"] for p in watch.get("panels", [])):
+                        raise ValueError("Duplicate ID")
+                    panels = [p for p in watch.get("panels", []) if p["id"] != self.editing_panel] + [panel]
+                    if len(panels) > 8 or len(panels) + len(watch["devices"]) > 16:
+                        raise ValueError("Too many pages")
+                    watch["panels"] = panels
+                    if not watch.get("entity") and not watch.get("active_panel"):
+                        watch["active_panel"] = panel["id"]
+                    watch["revision"] += 1
+                    await save(runtime)
+                    async_dispatcher_send(self.hass, f"{DOMAIN}_updated")
+                return self.async_create_entry(title="", data={})
+            except (ValueError, KeyError):
+                errors["base"] = "invalid_panel"
+        existing = {**existing, **(user_input or {})}
+        fields = {vol.Required("id", default=existing.get("id", "on_duty")): str,
+                  vol.Required("name", default=existing.get("name", "On Duty")): str}
+        for role in ("city_pair_entity", "departure_entity"):
+            fields[vol.Required(role, **({"default": existing[role]} if existing.get(role) else {}))] = selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor"))
+        return self.async_show_form(step_id="on_duty", errors=errors, data_schema=vol.Schema(fields))
 
     async def async_step_add_fan(self, user_input=None):
         self.editing_panel = None
@@ -231,6 +271,8 @@ class FanControlOptions(config_entries.OptionsFlow):
         if user_input is not None:
             self.editing_panel = user_input["panel_id"]
             selected = next(item for item in watch["panels"] if item["id"] == self.editing_panel)
+            if selected.get("type") == "on_duty":
+                return await self.async_step_on_duty()
             if selected.get("type") == "fan":
                 return await self.async_step_fan()
             if selected.get("type") == "driving":

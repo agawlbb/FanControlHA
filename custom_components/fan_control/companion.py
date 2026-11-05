@@ -17,6 +17,7 @@ def handle(hass, watch, body):
         return {**configuration(watch), "token": linked["secret"], "companion": True}
     if action in ("companion_revoke", "companion_unlink"):
         watch.pop("companion", None)
+        watch.pop("messages", None)
         if watch.get("push_registration", {}).get("destination") == "phone":
             watch.pop("push_registration", None)
         return {"status": "revoked"}
@@ -52,4 +53,4 @@ def handle(hass, watch, body):
     # of configuration revision and phone/watch clock differences.
     watch["companion_sequence"] = watch.get("companion_sequence", 0) + 1
     return {"configuration": config, "states": states, "sequence": watch["companion_sequence"],
-            "at_ms": int(time.time() * 1000)}
+            "at_ms": int(time.time() * 1000), "messages": list(watch.get("messages", []))}

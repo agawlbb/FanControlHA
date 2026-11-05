@@ -33,12 +33,26 @@ def register_service(hass, runtime):
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers.service import async_register_admin_service
 
-    async def send_notification(call):
+    def recipient(call):
         device = dr.async_get(hass).async_get(call.data["device_id"])
         identities = [value for domain, value in device.identifiers if domain == DOMAIN] if device else []
         if (device is None or runtime["entry"].entry_id not in device.config_entries
                 or len(identities) != 1):
             raise HomeAssistantError("Select a Fan Control Apple Watch with a linked iPhone")
-        await runtime["push"].notify_phone(identities[0], call.data["title"], call.data["message"])
+        if runtime["manager"].watches.get(identities[0], {}).get("platform") != "watch_os":
+            raise HomeAssistantError("Select a Fan Control Apple Watch")
+        return identities[0]
 
+    async def send_notification(call):
+        await runtime["push"].notify_phone(recipient(call), call.data["title"], call.data["message"])
+
+    async def clear_messages(call):
+        from . import save
+        watch_id = recipient(call)
+        async with runtime["lock"]:
+            runtime["manager"].watches[watch_id]["messages"] = []
+            await save(runtime)
+        runtime["push"].queue(watch_id, "configuration")
     async_register_admin_service(hass, DOMAIN, "send_notification", send_notification, schema=SCHEMA)
+    async_register_admin_service(hass, DOMAIN, "clear_messages", clear_messages,
+                                schema=vol.Schema({vol.Required("device_id"): str}))

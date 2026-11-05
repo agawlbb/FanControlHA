@@ -1,12 +1,15 @@
 """Typed, user-configured panels. Entity permissions remain server-side."""
 import math
 import re
+from .on_duty import validate_on_duty, on_duty_state
 from .panel_color import add_color
 from .exercise import validate_exercise, exercise_state
 from .driving import validate_driving, driving_state, driving_command
 
 
 def validate_panel(value):
+    if isinstance(value, dict) and value.get("type") == "on_duty":
+        return validate_on_duty(value)
     if isinstance(value, dict) and value.get("type") == "fan":
         result = {"type": "fan"}
         for key, default in (("id", "fan"), ("name", "Fan Control")):
@@ -71,6 +74,8 @@ def configuration(watch):
 
 
 def panel_state(hass, panel):
+    if panel.get("type") == "on_duty":
+        return on_duty_state(hass, panel)
     if panel.get("type") == "fan":
         state = hass.states.get(panel["fan_entity"])
         return {"state": state.state if state else "unavailable", "attributes": {key: state.attributes[key] for key in ("percentage", "supported_features") if key in state.attributes} if state else {}}
@@ -111,6 +116,8 @@ def panel_state(hass, panel):
 
 
 def panel_command(hass, panel, action):
+    if panel.get("type") == "on_duty":
+        raise ValueError("On Duty is read-only")
     if panel.get("type") == "fan":
         from . import command
         if panel_state(hass, panel)["state"] not in ("on", "off"):

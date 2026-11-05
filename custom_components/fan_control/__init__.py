@@ -97,6 +97,7 @@ async def async_unload_entry(hass, entry):
     hass.services.async_remove(DOMAIN, "set_active_device")
     hass.services.async_remove(DOMAIN, "set_active_panel")
     hass.services.async_remove(DOMAIN, "send_notification")
+    hass.services.async_remove(DOMAIN, "clear_messages")
     runtime = hass.data.pop(DOMAIN, None)
     if runtime:
         runtime["unloading"] = True

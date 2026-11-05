@@ -63,3 +63,15 @@ send_notification:
       selector:
         text:
           multiline: true
+
+clear_messages:
+  name: Clear messages
+  description: Clears all messages from the linked iPhone app. Does not remove notifications from Notification Center.
+  fields:
+    device_id:
+      name: Recipient
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: fan_control
