@@ -51,7 +51,8 @@ as part of source implementation.
 ## Validation
 
 297 Python integration tests and eight relay tests passed; Python compilation passed.
-Apple validation is recorded with the completed task in the Apple repository.
+All 78 Swift tests and iPhone/watch source typechecks passed on Mac run
+https://github.com/agawlbb/FanControlWatch/actions/runs/42039898195.
 Physical checks: gray cache then teal refreshed flight data, background phone
 updates, departure/countdown across timezones, full text on cold/warm notification
 taps, and arrival clearing while the phone is suspended then reopened.
