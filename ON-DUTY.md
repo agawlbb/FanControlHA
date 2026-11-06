@@ -1,3 +1,7 @@
+> Message behavior below describes the original release. It is superseded by
+> phone-only storage and 12-hour/manual dismissal with HA 0.14.0 and the next
+> iPhone build. Arrival no longer clears messages; HA no longer retains them.
+
 # On Duty tile and iPhone messages
 
 Task `feature/on-duty`, based on canonical main

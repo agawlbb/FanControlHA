@@ -38,6 +38,12 @@ async def async_setup_entry(hass, entry):
                "push_settings": saved.get("push_settings", {})}
     runtime["operation_store"] = Store(hass, 1, DOMAIN + "_operations")
     hass.data[DOMAIN] = runtime
+    # Message retention now belongs exclusively to the iPhone.
+    if any("messages" in watch for watch in manager.watches.values()):
+        async with runtime["lock"]:
+            for watch in manager.watches.values():
+                watch.pop("messages", None)
+            await save(runtime)
     from .vehicle_operations import restore
     await restore(hass, runtime, await runtime["operation_store"].async_load())
     from .push import PushCoordinator
@@ -97,7 +103,6 @@ async def async_unload_entry(hass, entry):
     hass.services.async_remove(DOMAIN, "set_active_device")
     hass.services.async_remove(DOMAIN, "set_active_panel")
     hass.services.async_remove(DOMAIN, "send_notification")
-    hass.services.async_remove(DOMAIN, "clear_messages")
     runtime = hass.data.pop(DOMAIN, None)
     if runtime:
         runtime["unloading"] = True
