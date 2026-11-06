@@ -14,7 +14,8 @@ automation keeps delay, schedule-attention and route-change alerts, without an
 arrival trigger. No notification, vehicle command or automation run is needed for
 validation. Background delivery remains subject to iOS scheduling.
 
-Requires the next iPhone build for swipe/expiry. Existing apps can still read full
+Deployed November 6, 2026; see [deployment evidence](DEPLOYMENT-PHONE-MESSAGES.md).
+Requires iPhone 0.11.0 (26) for swipe/expiry. Existing apps can still read full
 notification text, but have no swipe/expiry UI. Task `feature/phone-only-messages`,
 HA base `e6fcd334780ef9afe30f69b15783204e1126e7db`.
 
