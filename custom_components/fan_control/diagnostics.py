@@ -1,5 +1,6 @@
-"""HA's Download diagnostics exposes push history without pairing/relay secrets."""
+"""HA's Download diagnostics exposes push history without pairing/signing secrets."""
 from .const import DOMAIN
+from .apns import configured
 from .panels import configuration
 
 
@@ -17,6 +18,6 @@ async def async_get_config_entry_diagnostics(hass, entry):
                         "uncorrelated_watch_events": watch.get("push_client_events", []),
                         "vehicle_operations": [{"panel_id": op["panel"]["id"], **{key: op[key] for key in ("id", "issued", "command", "status", "stage", "finished_ms", "reason", "timing", "events", "notification_result", "notified_status") if key in op}}
                             for op in runtime.get("vehicle_operations", {}).values() if op["watch_id"] == watch_id]})
-    return {"push_enabled": bool(runtime.get("push_settings", {}).get("enabled")),
+    return {"push_transport": "direct_apns", "push_enabled": configured(runtime.get("push_settings", {})),
             "receipt_unknown_means": "No watch receipt reported; not proof of nondelivery. History is bounded to 120 attempts per watch.",
             "watches": watches}

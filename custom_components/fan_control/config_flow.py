@@ -38,18 +38,21 @@ class FanControlOptions(config_entries.OptionsFlow):
         return self.async_show_menu(step_id="init", menu_options=["pair", "configure", "panels", "push", "revoke"])
 
     async def async_step_push(self, user_input=None):
-        import re
         runtime = self.hass.data[DOMAIN]
         current = runtime.get("push_settings", {})
         errors = {}
         if user_input is not None:
             candidate = {"enabled": user_input.get("enabled", False),
-                         "installation": user_input.get("installation", "").strip(),
-                         "secret": user_input.get("secret") or current.get("secret", "")}
-            if candidate["enabled"] and (not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", candidate["installation"])
-                                         or not 32 <= len(candidate["secret"]) <= 256):
-                errors["base"] = "invalid_push"
-            else:
+                         "team_id": user_input.get("team_id", current.get("team_id", "")).strip(),
+                         "key_id": user_input.get("key_id", current.get("key_id", "")).strip()}
+            if candidate["enabled"]:
+                from .apns import credentials
+                from cryptography.exceptions import UnsupportedAlgorithm
+                try:
+                    await self.hass.async_add_executor_job(credentials, self.hass, candidate)
+                except (OSError, ValueError, TypeError, UnsupportedAlgorithm):
+                    errors["base"] = "invalid_push"
+            if not errors:
                 async with runtime["lock"]:
                     push = runtime.get("push")
                     if push:
@@ -60,8 +63,8 @@ class FanControlOptions(config_entries.OptionsFlow):
                 return self.async_create_entry(title="", data={})
         return self.async_show_form(step_id="push", errors=errors, data_schema=vol.Schema({
             vol.Required("enabled", default=current.get("enabled", False)): bool,
-            vol.Optional("installation", default=current.get("installation", "")): str,
-            vol.Optional("secret"): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
+            vol.Optional("team_id", default=current.get("team_id", "")): str,
+            vol.Optional("key_id", default=current.get("key_id", "")): str,
         }))
 
     async def async_step_pair(self, user_input=None):

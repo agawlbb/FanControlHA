@@ -9,7 +9,7 @@ from .const import DOMAIN
 
 
 def notification_text(value, limit):
-    """Bound UTF-8 bytes so both relay requests and APNs payloads fit."""
+    """Bound UTF-8 bytes so APNs payloads fit."""
     if (not isinstance(value, str) or not value.strip()
             or any(ord(c) < 32 and c not in "\n\t" for c in value)):
         raise vol.Invalid("Notification text must not be blank or contain control characters")

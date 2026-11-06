@@ -109,9 +109,10 @@ watch-only and separate from phone snapshot registration. Keep normal delays
 silent; deduplicate retries by operation/outcome and suppress stale/superseded
 failures. Entry-only wake trouble is diagnostic, not an extra command alert.
 Preserve bounded retry/recovery and record whether APNs accepted a notification;
-never equate APNs acceptance with watch receipt. Notification permission and relay
-availability remain prerequisites. The relay's new outcome API, HA capability 2
-and watch changes must be validated/deployed together only after release approval.
+never equate APNs acceptance with watch receipt. Notification permission and direct APNs signing credentials remain prerequisites.
+HA 0.13.0 sends pushes directly to Apple; no hosted relay fallback is permitted.
+The signing key stays in /config/fancontrol-apns.p8, outside source and diagnostics.
+Preserve fixed phone/watch topics, token isolation and bounded outcome handling.
 
 Keep server timing/events bounded and correlated by operation ID: request arrival,
 authenticated registration, durable acceptance, wake dispatch/online observation,

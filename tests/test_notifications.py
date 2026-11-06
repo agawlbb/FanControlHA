@@ -37,19 +37,22 @@ def test_schema_defaults_and_unicode():
 async def test_visible_alert_uses_separate_phone_identity_without_refresh_or_command():
     hass, manager, wid, push, watch = setup()
     await push.notify_phone(wid, "Garage", "Still open\n😀")
-    registered, notification = [call.args[0] for call in push.send.call_args_list]
-    assert registered == {"action": "register", "watch_id": wid + ".notifications", **watch["push_registration"]}
-    assert notification["action"] == "notify" and notification["watch_id"] == wid + ".notifications"
-    assert notification["title"] == "Garage" and notification["message"] == "Still open\n😀"
+    push.send.assert_awaited_once()
+    target, notification = push.send.call_args.args
+    first_id = push.send.call_args.kwargs["update_id"]
+    assert target == watch["push_registration"]
+    assert notification["fancontrol"]["watch_id"] == wid
+    assert notification["aps"]["alert"] == {"title":"Garage", "body":"Still open\n😀"}
+    assert push.send.call_args.kwargs["push_type"] == "alert"
     assert watch["push_registration"]["destination"] == "phone"
     assert not push.tasks
     hass.services.async_call.assert_not_awaited()
     await push.notify_phone(wid, "Garage", "Still open")
-    assert push.send.call_args.args[0]["update_id"] != notification["update_id"]
+    assert push.send.call_args.kwargs["update_id"] != first_id
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["missing", "no_companion", "watch_route", "disabled", "closed", "unloading", "owner"])
+@pytest.mark.parametrize("change", ["missing", "no_companion", "watch_route", "disabled", "closed", "unloading", "owner", "missing_owner"])
 async def test_unavailable_recipients_never_dispatch(change):
     hass, manager, wid, push, watch = setup()
     if change == "missing": manager.watches.clear()
@@ -59,44 +62,35 @@ async def test_unavailable_recipients_never_dispatch(change):
     elif change == "closed": push.closed = True
     elif change == "unloading": push.runtime["unloading"] = True
     elif change == "owner": hass.auth.async_get_user.return_value.is_active = False
+    elif change == "missing_owner": hass.auth.async_get_user.return_value = None
     with pytest.raises(HomeAssistantError): await push.notify_phone(wid, "Title", "Message")
     push.send.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("change", ["revoke", "unlink", "token", "owner", "settings", "close"])
-async def test_recipient_change_during_registration_prevents_alert(change):
+async def test_recipient_change_before_signing_prevents_alert(change):
     hass, manager, wid, push, watch = setup()
-    async def send(body):
+    async def save_snapshot(*args):
         if change == "revoke": manager.watches.clear()
         elif change == "unlink": watch.pop("companion")
         elif change == "token": watch["push_registration"]["device_token"] = "b" * 64
         elif change == "owner": hass.auth.async_get_user.return_value.is_active = False
-        elif change == "settings": push.settings["installation"] = "other"
+        elif change == "settings": push.settings["team_id"] = "other"
         elif change == "close": push.closed = True
-        return 200
-    push.send.side_effect = send
+    push.runtime["store"].async_save.side_effect = save_snapshot
     with pytest.raises(HomeAssistantError): await push.notify_phone(wid, "Title", "Message")
-    assert push.send.await_count == 1
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("response", [404, 410, 429, 502])
-async def test_registration_failure_prevents_alert(response):
-    hass, manager, wid, push, watch = setup()
-    push.send.side_effect = [response]
-    with pytest.raises(HomeAssistantError): await push.notify_phone(wid, "Title", "Message")
-    assert push.send.await_count == 1
+    push.send.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("response", [410, 429, 502, TimeoutError("private-token-and-message")])
 async def test_failed_or_ambiguous_dispatch_is_not_retried_or_reported_successful(response):
     hass, manager, wid, push, watch = setup()
-    push.send.side_effect = [200, response]
+    push.send.side_effect = [response]
     with pytest.raises(HomeAssistantError) as error: await push.notify_phone(wid, "Title", "Message")
     assert "private-token" not in str(error.value)
-    assert push.send.await_count == 2
+    assert push.send.await_count == 1
 
 
 @pytest.mark.asyncio

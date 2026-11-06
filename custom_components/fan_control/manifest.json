@@ -1,7 +1,7 @@
 {
   "domain": "fan_control",
   "name": "Fan Control",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "config_flow": true,
   "documentation": "https://github.com/agawlbb/FanControlHA",
   "issue_tracker": "https://github.com/agawlbb/FanControlHA/issues",
@@ -9,7 +9,9 @@
     "http",
     "network"
   ],
-  "requirements": [],
+  "requirements": [
+    "httpx[http2]==0.28.1"
+  ],
   "codeowners": [],
   "iot_class": "local_polling",
   "integration_type": "hub"

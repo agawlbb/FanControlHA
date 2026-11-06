@@ -1,3 +1,11 @@
+# Historical FanControl relay — retired from HA 0.13.0
+
+HA now sends directly to Apple's APNs service. This directory and its tests are
+retained for recovery/history; do not deploy it as part of current Fan Control
+setup. See the repository README for direct signing-key configuration. Retiring
+the live endpoint must preserve private rollback data and follow verified direct
+activation; do not revoke a signing key still used by HA.
+
 # FanControl APNs relay
 
 Public endpoint: `https://coffeybean.com/FanControl/` (the directory URL may redirect from the slashless form; POST directly to the trailing slash).

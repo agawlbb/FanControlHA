@@ -1,13 +1,48 @@
-# Current release - HA 0.10.0 / Apple 0.9.0 (18)
+# Fan Control for Home Assistant
 
-HA 0.10.0 and the command outcome relay are deployed. Apple 0.9.0 (18) is the
-matching client. All Apple HA commands use durable server-owned operations;
-watch navigation does not cancel accepted delivery. Existing pairings are preserved.
-Requested controls turn teal when HA accepts ownership, with physical execution
-tracked separately. Ordinary command controls have no separate status messages.
-See [command delivery](COMMAND-OPERATIONS.md),
-[implementation details](UNRELEASED-CORRECTIONS.md) and
-[deployment/rollback evidence](DEPLOYMENT-0.10.0.md). Physical watch/car checks remain.
+## Direct Apple push — 0.13.0
+
+HA sends all Fan Control push traffic directly to Apple's APNs service over
+HTTP/2: iPhone automation alerts, passive snapshot refreshes and watch command
+outcomes. There is no relay URL, relay shared secret, relay registration call or
+relay database in the active delivery path. Existing iPhone/watch apps and HA
+pairings remain compatible. The Fan Control iPhone topic stays
+`dev.fancontrol.watch`; watch outcomes stay on `dev.fancontrol.watch.watchkitapp`.
+
+Install the APNs P-256 `.p8` signing key as `/config/fancontrol-apns.p8` with mode
+`0600` and an owner readable by HA. In **Fan Control → Configure → Apple push
+notifications**, enter the Apple Team ID and APNs Key ID, then enable push.
+The key must authorize both Fan Control app topics in the environment used by
+registered devices. Key IDs are saved through HA's native options flow; the key
+itself remains outside the integration source and diagnostics. Protect this file
+in HA backups as you would pairing credentials. Never put it in Git or send it
+to the phone/watch. Signing tokens are reused for 50 minutes and regenerated
+on configuration changes; A dedicated TLS-verified HTTP/2 connection pool is reused and closed when
+credentials change or the integration unloads, as required for APNs key rotation. The only permitted destination hosts are Apple's production and
+sandbox APNs servers. Redirects and automatic transport retries are disabled.
+
+Existing relay settings do not enable direct delivery. Configure the signing
+key and IDs before activation. No relay fallback is retained. When rotating the
+key file, save the push settings again so cached signing tokens are cleared.
+A confirmed invalid APNs device token is removed from HA only if the matching
+registration has not been replaced; the app can re-register normally.
+
+APNs acceptance still does not establish device receipt, display, physical
+command completion or that a notification was read. Automation alerts are sent
+once per call. Command outcomes retain bounded retries for explicit rejection;
+an ambiguous dispatch is persisted and never automatically replayed, including
+after HA restart. Passive hints remain coalesced and do not wake vehicles.
+Retire the hosted relay only after direct credentials and delivery are verified;
+preserve private rollback evidence rather than deleting keys or databases blindly.
+Historical relay source/tests remain as recovery evidence and are not used by HA.
+
+Task `feature/direct-apns`, based on canonical main
+`e10281f8ba16b71a913743f88d4a6f0458c22ba7`. Deployment and APNs credential
+migration are separate from source validation. Validation: 329 integration and
+historical relay regression tests passed, including direct HTTP/2 request routing,
+ES256 signatures, token reuse/rotation, bounded timeouts, revocation, receipt
+separation and ambiguous-dispatch restart recovery. Python compilation passed.
+Live APNs acceptance is checked separately during credential migration.
 
 ## Automation notifications — 0.11.0
 
@@ -30,9 +65,9 @@ message is required (maximum 1500 UTF-8 bytes). Unicode and line breaks are supp
 The action is available to administrators and automations. It sends one notification
 to the selected watch's linked phone, without changing selection or waking vehicles.
 
-Requires this integration, the updated relay entry, and a Fan Control iPhone build
+Requires this integration, direct APNs credentials, and a Fan Control iPhone build
 containing the Notifications settings section. Link the phone to the selected watch,
-enable the relay in Fan Control's HA options, then open Fan Control on iPhone and use
+enable Apple push in Fan Control's HA options, then open Fan Control on iPhone and use
 **Settings → Notifications → Enable notifications**. If permission was denied, use
 **Notification settings** to change it in iOS. FanControl 0.10.0 (24) and HA 0.12.0
 are released/deployed; see [On Duty activation and deployment evidence](ON-DUTY.md).
@@ -41,8 +76,8 @@ HA sends a visible APNs alert directly to Fan Control's iPhone topic
 `dev.fancontrol.watch`. It does not wait for background execution on either app.
 Apple may display it on the watch instead, depending on device state, mirroring,
 Focus and notification settings. Successful action completion means APNs accepted
-the alert, not that it was received or read. Disabled relay, missing/revoked phone,
-inactive owner, registration rejection and delivery errors fail the HA action.
+the alert, not that it was received or read. Disabled push, missing/revoked phone,
+inactive owner, APNs rejection and delivery errors fail the HA action.
 Ambiguous delivery is not retried automatically, to avoid duplicate alerts.
 Each action invocation has its own alert identity so separate events do not coalesce.
 Existing watch-only command outcome notifications remain separate.
@@ -59,9 +94,8 @@ contain approved roles, passive states, a persisted sequence and HA time.
 Settings writes require the current revision; tile order never changes active
 selection or wakes vehicles. Phone self-unlink leaves watch commands authorized.
 
-Deploy the updated relay public/index.php for phone APNs routing. Existing SQLite
-rows migrate to the legacy watch destination; phone tokens use the fixed topic
-dev.fancontrol.watch. The relay APNs key must authorize this phone topic in the
+HA 0.13.0 sends phone snapshots directly to APNs; phone tokens use the fixed
+topic dev.fancontrol.watch. Its signing key must authorize this phone topic in the
 selected environment; a team-scoped key can serve multiple apps. The phone never
 receives an Apple private key or HA admin token. Phone
 registration replaces the legacy watch destination for that watch. Diagnostics

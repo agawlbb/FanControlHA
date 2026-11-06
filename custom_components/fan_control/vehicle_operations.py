@@ -8,6 +8,7 @@ from homeassistant.core import Context
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .const import DOMAIN
+from .apns import configured as push_configured
 from .panels import find_panel, panel_command, panel_state
 from .exercise import climate_unit, select_driving_after_stop
 
@@ -34,7 +35,7 @@ def snapshot(hass, op):
             "final_deadline_ms": op["issued"] + (DELIVERY_SECONDS + FINAL_SECONDS) * 1000,
             "stage": op["stage"], "reason": op.get("reason", ""), "steps": list(op["steps"]),
             "timing": dict(op.get("timing", {})), "events": list(op.get("events", [])),
-            "outcome_alerts": bool(hass.data.get(DOMAIN, {}).get("push_settings", {}).get("enabled") and
+            "outcome_alerts": bool(push_configured(hass.data.get(DOMAIN, {}).get("push_settings", {})) and
                 hass.data.get(DOMAIN, {}).get("manager").watches.get(op["watch_id"], {}).get("command_push_registration"))
                 if hass.data.get(DOMAIN, {}).get("manager") else False}
 
@@ -54,7 +55,8 @@ def queue_outcome(hass, runtime, op):
         return
     key = (op["watch_id"], op["id"])
     tasks = runtime.setdefault("operation_notifications", {})
-    if op.get("notified_status") == op["status"] or key in tasks:
+    if (op.get("notified_status") == op["status"] or key in tasks
+            or op.get("notification_dispatch_status") == op["status"]):
         return
     async def deliver():
         try:
@@ -70,6 +72,10 @@ def queue_outcome(hass, runtime, op):
                 if push is None:
                     return
                 try:
+                    # Persist the attempt boundary before APNs. A restart during an
+                    # ambiguous dispatch must not send the same alert again.
+                    op["notification_dispatch_status"] = op["status"]
+                    await persist(runtime)
                     result = await push.command_outcome(op)
                     op["notification_result"] = result
                     if push.status(result) == 202:
@@ -77,8 +83,18 @@ def queue_outcome(hass, runtime, op):
                         event(op, "notification_accepted")
                         await persist(runtime)
                         return
+                    if push.status(result) == 0 or result.get("error") == "http2_required":
+                        event(op, "notification_delivery_unknown")
+                        await persist(runtime)
+                        return
+                    # A definitive rejection may use the existing bounded retries.
+                    op.pop("notification_dispatch_status", None)
+                    await persist(runtime)
                 except Exception:
                     op["notification_result"] = {"http_status": 0}
+                    event(op, "notification_delivery_unknown")
+                    await persist(runtime)
+                    return
             event(op, "notification_unconfirmed")
             await persist(runtime)
         finally:

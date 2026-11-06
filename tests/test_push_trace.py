@@ -57,7 +57,7 @@ def test_watch_scope_unknown_ids_invalid_batches_and_bounded_retention():
 async def test_attempt_persisted_before_send_and_failures_visible():
     hass, manager, watch_id, push = setup_push()
     watch = manager.watches[watch_id]
-    async def failing_send(body):
+    async def failing_send(*args, **kwargs):
         assert watch["push_history"][-1]["status"] == "attempted"
         assert hass.data["fan_control"]["store"].async_save.await_count > 0
         raise OSError("synthetic network failure")
@@ -83,24 +83,22 @@ async def test_encrypted_receipts_and_secret_free_admin_diagnostics():
     diagnostic = await async_get_config_entry_diagnostics(hass, None)
     encoded = json.dumps(diagnostic)
     assert watch["secret"] not in encoded and "device_token" not in encoded
-    assert push.settings["secret"] not in encoded and "owner_id" not in encoded
+    assert "key_id" not in encoded and "owner_id" not in encoded
     assert diagnostic["watches"][0]["uncorrelated_watch_events"][0]["phase"] == "opened"
     assert diagnostic["watches"][0]["push_history"][0]["receipt"] == "received"
     hass.services.async_call.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_relay_acceptance_keeps_receipt_unknown_until_watch_reports():
+async def test_apns_acceptance_keeps_receipt_unknown_until_watch_reports():
     hass, manager, watch_id, push = setup_push()
-    async def send(body):
-        if body["action"] == "register":
-            return {"http_status":200}
-        return {"http_status":202,"status":"accepted_by_apns","apns_id":body["update_id"],"apns_status":200}
+    async def send(*args, **kwargs):
+        return {"http_status":202,"status":"accepted_by_apns","apns_id":kwargs["update_id"],"apns_status":200}
     push.send = send
     push.updated()
     await asyncio.gather(*push.tasks.values())
     attempt = manager.watches[watch_id]["push_history"][-1]
     assert attempt["status"] == "accepted_by_apns" and attempt["receipt"] == "unknown"
-    assert attempt["relay_result"]["apns_id"] == attempt["update_id"]
+    assert attempt["apns_result"]["apns_id"] == attempt["update_id"]
     assert "selection_saved" not in attempt
     hass.services.async_call.assert_not_awaited()

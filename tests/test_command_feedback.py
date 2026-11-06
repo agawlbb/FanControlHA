@@ -103,14 +103,14 @@ async def test_watch_outcome_registration_is_separate_from_phone(monkeypatch):
     assert response.status == 200
     assert watch["push_registration"]["destination"] == "phone"
     assert watch["command_push_registration"]["device_token"] == "a"*64
-    rt=hass.data["fan_control"];rt["push_settings"]={"enabled":True}
-    push=PushCoordinator(hass,rt);push.send=AsyncMock(side_effect=[{"http_status":200},{"http_status":202}])
+    rt=hass.data["fan_control"];rt["push_settings"]={"enabled":True,"team_id":"SYNTHETIC1","key_id":"SYNTHETIC2"}
+    push=PushCoordinator(hass,rt);push.send=AsyncMock(return_value={"http_status":202})
     op={"id":body["operation_id"],"issued":body["issued_at_ms"],"panel":body["panel_config"],"watch_id":wid,"secret":watch["secret"],"owner":watch["owner_id"],"status":"failed"}
     assert (await push.command_outcome(op))["http_status"] == 202
-    assert push.send.await_args_list[0].args[0]["watch_id"] == wid+".commands"
     assert push.send.await_args_list[0].args[0]["destination"] == "watch"
-    assert push.send.await_args_list[1].args[0]["status"] == "failed"
-    assert "device_token" not in push.send.await_args_list[1].args[0]
+    assert push.send.await_args_list[0].args[0]["device_token"] == "a"*64
+    assert push.send.await_args_list[0].args[1]["aps"]["alert"]["title"] == "Fan Control request failed"
+    assert push.send.await_args_list[0].kwargs["push_type"] == "alert"
 
 @pytest.mark.asyncio
 async def test_cosmetic_panel_changes_do_not_cancel_valid_entry(monkeypatch):
@@ -137,17 +137,48 @@ async def test_legacy_watch_registration_cannot_replace_phone_snapshot_route(mon
     assert watch["push_registration"]["device_token"] == "b"*64
 
 @pytest.mark.asyncio
-async def test_notification_retry_rechecks_supersession_after_registration(monkeypatch):
+async def test_notification_rechecks_supersession_after_owner_lookup(monkeypatch):
     hass,watch,wid,states,clock,body=setup(monkeypatch)
-    rt=hass.data["fan_control"];rt["push_settings"]={"enabled":True}
+    rt=hass.data["fan_control"];rt["push_settings"]={"enabled":True,"team_id":"SYNTHETIC1","key_id":"SYNTHETIC2"}
     watch["command_push_registration"]={"device_token":"a"*64,"environment":"production"}
-    push=PushCoordinator(hass,rt)
+    push=PushCoordinator(hass,rt);push.send=AsyncMock()
     op={"id":body["operation_id"],"issued":body["issued_at_ms"],"panel":body["panel_config"],"watch_id":wid,"secret":watch["secret"],"owner":watch["owner_id"],"status":"failed"}
-    calls=[]
-    async def send(payload):
-        calls.append(payload)
+    owner=hass.auth.async_get_user.return_value
+    async def get_owner(*args):
         rt.setdefault("vehicle_latest",{})[(wid,op["panel"]["id"]) ]={"issued":op["issued"]+1}
-        return {"http_status":200}
-    push.send=send
+        return owner
+    hass.auth.async_get_user.side_effect=get_owner
     assert (await push.command_outcome(op))["http_status"] == 409
-    assert len(calls) == 1
+    push.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_alert_dispatch_is_persisted_and_never_replayed(monkeypatch):
+    hass, watch, wid, states, clock, body = setup(monkeypatch, DRIVING, "climate_on", asleep=True)
+    rt = hass.data["fan_control"]
+    push = rt["push"] = SimpleNamespace(command_outcome=AsyncMock(return_value={"http_status":0,"error":"delivery_unknown"}),status=PushCoordinator.status)
+    vo.handle(hass, rt, wid, watch, body)
+    op = await complete(hass, wid, body)
+    tasks=list(rt["operation_notifications"].values())
+    if tasks: await asyncio.gather(*tasks)
+    assert op["notification_dispatch_status"] == op["status"]
+    push.command_outcome.assert_awaited_once()
+    assert op.get("notified_status") is None
+    vo.queue_outcome(hass,rt,op)
+    assert not rt["operation_notifications"]
+    # Restore the persisted attempt boundary as on HA restart.
+    restored = dict(op)
+    vo.queue_outcome(hass,rt,restored)
+    assert not rt["operation_notifications"]
+
+
+@pytest.mark.asyncio
+async def test_explicit_apns_rejection_can_retry_with_same_outcome_identity(monkeypatch):
+    hass, watch, wid, states, clock, body = setup(monkeypatch, DRIVING, "climate_on", asleep=True)
+    rt=hass.data["fan_control"]
+    push=rt["push"]=SimpleNamespace(command_outcome=AsyncMock(side_effect=[{"http_status":502,"apns_status":429},{"http_status":202}]),status=PushCoordinator.status)
+    vo.handle(hass,rt,wid,watch,body)
+    op=await complete(hass,wid,body)
+    tasks=list(rt["operation_notifications"].values())
+    if tasks: await asyncio.gather(*tasks)
+    assert op["notified_status"] == op["status"] and push.command_outcome.await_count == 2

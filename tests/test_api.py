@@ -27,7 +27,7 @@ def runtime():
     data = {"manager": manager, "store": store, "lock": asyncio.Lock(), "attempts": {}}
     state = SimpleNamespace(state="on", attributes={"percentage": 66, "supported_features": 1, "private_attribute": "hidden"})
     owner = SimpleNamespace(id="example-owner", name="Administrator", is_admin=True, is_active=True)
-    hass = SimpleNamespace(data={"fan_control": data}, auth=SimpleNamespace(async_get_user=AsyncMock(return_value=owner), async_get_users=AsyncMock(return_value=[owner])), states=SimpleNamespace(get=lambda entity: state), services=SimpleNamespace(async_call=AsyncMock()))
+    hass = SimpleNamespace(data={"fan_control": data}, auth=SimpleNamespace(async_get_user=AsyncMock(return_value=owner), async_get_users=AsyncMock(return_value=[owner])), states=SimpleNamespace(get=lambda entity: state), services=SimpleNamespace(async_call=AsyncMock()), async_add_executor_job=AsyncMock(side_effect=lambda func, *args: func(*args)))
     return hass, manager, watch_id, created
 
 @pytest.mark.asyncio
