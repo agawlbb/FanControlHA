@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import json
+import logging
 import re
 import time
 from pathlib import Path
@@ -15,6 +16,18 @@ PHONE_TOPIC = "dev.fancontrol.watch"
 WATCH_TOPIC = "dev.fancontrol.watch.watchkitapp"
 KEY_FILE = "fancontrol-apns.p8"
 REQUEST_TIMEOUT = 15.0
+
+
+def _redact_request_log(record):
+    # APNs puts the device credential in the URL, including normal HTTPX INFO logs.
+    text = record.getMessage()
+    cleaned = re.sub(r"(https://api(?:\.sandbox)?\.push\.apple\.com/3/device/)[^\s\"']+", r"\1[redacted]", text)
+    if cleaned != text:
+        record.msg, record.args = cleaned, ()
+    return True
+
+
+logging.getLogger("httpx").addFilter(_redact_request_log)
 
 
 def configured(settings):

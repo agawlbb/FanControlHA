@@ -227,3 +227,12 @@ async def test_total_network_deadline_cancels_dispatch_without_retry(setup, monk
     assert (await deliver(apns)) == {"http_status":0,"error":"delivery_unknown"}
     assert len(requests) == 1
     await apns.reset()
+
+
+def test_httpx_request_logging_redacts_device_credentials():
+    import logging
+    from custom_components.fan_control.apns import _redact_request_log
+    for host in ("api.push.apple.com", "api.sandbox.push.apple.com"):
+        record=logging.LogRecord("httpx",logging.INFO,"",1,"HTTP Request: POST %s HTTP/2 200",("https://"+host+"/3/device/"+"a"*64,),None)
+        assert _redact_request_log(record)
+        assert "a"*64 not in record.getMessage() and "[redacted]" in record.getMessage()
