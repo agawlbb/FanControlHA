@@ -37,11 +37,13 @@ async def test_native_panel_create_edit_and_snapshot_messages():
     assert (await flow.async_step_on_duty(PANEL))["type"] == "create_entry"
     assert (await flow.async_step_edit_panel({"panel_id": "on_duty"}))["step_id"] == "on_duty"
     assert (await flow.async_step_on_duty({**PANEL, "id": "changed"}))["errors"]
+    hass.data["fan_control"]["store"].async_save.reset_mock()
     await push.notify_phone(wid, "Delayed", "Full alert text")
-    message = watch["messages"][0]
-    assert push.send.call_args.kwargs["update_id"] == message["id"]
-    assert handle(hass, watch, {"action": "companion_snapshot"})["messages"] == [message]
-    assert message["title"] == "Delayed" and message["message"] == "Full alert text"
-    hass.data["fan_control"]["store"].async_save.assert_awaited()
+    payload = push.send.call_args.args[1]
+    assert payload["aps"]["alert"]["body"] == "Full alert text"
+    assert payload["fancontrol"]["sent_at_ms"] > 0
+    assert "messages" not in watch
+    assert "messages" not in handle(hass, watch, {"action": "companion_snapshot"})
+    hass.data["fan_control"]["store"].async_save.assert_not_awaited()
     handle(hass, watch, {"action": "companion_unlink"})
     assert "messages" not in watch

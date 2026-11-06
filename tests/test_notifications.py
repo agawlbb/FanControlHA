@@ -46,6 +46,10 @@ async def test_visible_alert_uses_separate_phone_identity_without_refresh_or_com
     assert push.send.call_args.kwargs["push_type"] == "alert"
     assert watch["push_registration"]["destination"] == "phone"
     assert not push.tasks
+    assert "messages" not in watch
+    assert notification["aps"]["content-available"] == 1
+    assert notification["fancontrol"]["sent_at_ms"] > 0
+    push.runtime["store"].async_save.assert_not_awaited()
     hass.services.async_call.assert_not_awaited()
     await push.notify_phone(wid, "Garage", "Still open")
     assert push.send.call_args.kwargs["update_id"] != first_id
@@ -78,7 +82,13 @@ async def test_recipient_change_before_signing_prevents_alert(change):
         elif change == "owner": hass.auth.async_get_user.return_value.is_active = False
         elif change == "settings": push.settings["team_id"] = "other"
         elif change == "close": push.closed = True
-    push.runtime["store"].async_save.side_effect = save_snapshot
+    owner = hass.auth.async_get_user.return_value
+    calls = [0]
+    async def get_owner(*args):
+        calls[0] += 1
+        if calls[0] == 2: await save_snapshot()
+        return owner
+    hass.auth.async_get_user.side_effect = get_owner
     with pytest.raises(HomeAssistantError): await push.notify_phone(wid, "Title", "Message")
     push.send.assert_not_awaited()
 
@@ -119,14 +129,7 @@ async def test_admin_service_registration_and_device_scope(monkeypatch):
     args, kwargs = calls[0]
     assert args[1:3] == ("fan_control", "send_notification")
     assert kwargs["schema"] is SCHEMA
-    clear_handler = calls[1][0][3]
-    assert calls[1][0][2] == "clear_messages"
-    push.queue = __import__("unittest.mock", fromlist=["Mock"]).Mock()
-    watch["messages"] = [{"id": "one", "title": "Delay", "message": "Full text"}]
-    await clear_handler(SimpleNamespace(data={"device_id": "device"}))
-    assert watch["messages"] == []
-    push.queue.assert_called_once_with(wid, "configuration")
-    hass.data["fan_control"]["store"].async_save.assert_awaited()
+    assert len(calls) == 1 # No server-side clear-all action remains.
     handler = args[3]
     await handler(SimpleNamespace(data=SCHEMA({"device_id": "device", "message": "Hello"})))
     push.notify_phone.assert_awaited_once_with(wid, "Fan Control", "Hello")

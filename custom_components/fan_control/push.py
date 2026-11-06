@@ -160,23 +160,15 @@ class PushCoordinator:
         owner = await self.hass.auth.async_get_user(owner_id)
         if not current() or owner is None or not owner.is_active or not owner.is_admin:
             raise HomeAssistantError("Notification recipient is no longer available")
-        # Keep the full message available to the linked iPhone after a banner is tapped.
         notification_id = str(uuid.uuid4())
-        async with self.runtime["lock"]:
-            if not current():
-                raise HomeAssistantError("Notification recipient changed before saving")
-            watch.setdefault("messages", []).append({"id": notification_id, "title": title,
-                "message": message, "at_ms": int(time.time() * 1000)})
-            from . import save
-            await save(self.runtime)
         try:
             # Token signing may await an executor; the transport rechecks scope afterward.
             owner = await self.hass.auth.async_get_user(owner_id)
             if not current() or owner is None or not owner.is_active or not owner.is_admin:
                 raise HomeAssistantError("Notification recipient is no longer available")
             payload = {"aps": {"alert": {"title": title, "body": message}, "sound": "default",
-                               "thread-id": "fancontrol-automations"},
-                       "fancontrol": {"notification": True, "update_id": notification_id, "watch_id": watch_id}}
+                               "thread-id": "fancontrol-automations", "content-available": 1},
+                       "fancontrol": {"notification": True, "update_id": notification_id, "watch_id": watch_id, "sent_at_ms": int(time.time() * 1000)}}
             result = await self.send(target, payload, update_id=notification_id, push_type="alert",
                                      collapse_id="fc-" + notification_id, current=current)
             if self.status(result) != 202:

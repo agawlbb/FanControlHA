@@ -53,4 +53,4 @@ def handle(hass, watch, body):
     # of configuration revision and phone/watch clock differences.
     watch["companion_sequence"] = watch.get("companion_sequence", 0) + 1
     return {"configuration": config, "states": states, "sequence": watch["companion_sequence"],
-            "at_ms": int(time.time() * 1000), "messages": list(watch.get("messages", []))}
+            "at_ms": int(time.time() * 1000)}

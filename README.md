@@ -1,5 +1,23 @@
 # Fan Control for Home Assistant
 
+## Phone-only messages — 0.14.0
+
+HA sends the full title/body and send timestamp in the APNs alert, without saving
+message history. Companion snapshots no longer contain message bodies. Existing
+live HA message copies are removed on integration setup; normal pairing, panels,
+operations and private source/state rollback copies remain intact.
+
+The iPhone owns manual swipe dismissal, local persistence, 12-hour expiry and
+Notification Center cleanup. Expiry is checked when the app opens and while it
+is active. The arrival clear-all action/service is removed. The flight-alert
+automation keeps delay, schedule-attention and route-change alerts, without an
+arrival trigger. No notification, vehicle command or automation run is needed for
+validation. Background delivery remains subject to iOS scheduling.
+
+Requires the next iPhone build for swipe/expiry. Existing apps can still read full
+notification text, but have no swipe/expiry UI. Task `feature/phone-only-messages`,
+HA base `e6fcd334780ef9afe30f69b15783204e1126e7db`.
+
 ## Direct Apple push — 0.13.1
 
 Deployed November 6, 2026; see [deployment evidence](DEPLOYMENT-DIRECT-APNS.md).
