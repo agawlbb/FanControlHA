@@ -1,6 +1,8 @@
 # Fan Control for Home Assistant
 
-## Direct Apple push — 0.13.0
+## Direct Apple push — 0.13.1
+
+Deployed November 6, 2026; see [deployment evidence](DEPLOYMENT-DIRECT-APNS.md).
 
 HA sends all Fan Control push traffic directly to Apple's APNs service over
 HTTP/2: iPhone automation alerts, passive snapshot refreshes and watch command
